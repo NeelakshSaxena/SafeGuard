@@ -265,14 +265,19 @@ let charts = {};
 async function fetchAnalytics() {
     try {
         const res = await fetch(`${API_BASE}/analytics/mock`);
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
+        
+        if (typeof Chart === 'undefined') {
+            throw new Error("Chart.js library is not loaded! The CDN might be blocked.");
+        }
         
         const c1 = document.getElementById('complianceChart').getContext('2d');
         if (charts.compliance) charts.compliance.destroy();
         charts.compliance = new Chart(c1, {
             type: 'bar',
             data: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], datasets: [{ label: 'Compliance %', data: data.compliance, backgroundColor: data.compliance.map(v => v >= 90 ? '#10B981' : '#F59E0B'), borderRadius: 4 }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            options: { responsive: true, plugins: { legend: { display: false } } }
         });
 
         const c2 = document.getElementById('riskChart').getContext('2d');
@@ -280,7 +285,7 @@ async function fetchAnalytics() {
         charts.risk = new Chart(c2, {
             type: 'line',
             data: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], datasets: [{ label: 'Avg Risk Score', data: data.risk_trend, borderColor: '#4F46E5', backgroundColor: 'rgba(79, 70, 229, 0.1)', fill: true, tension: 0.4 }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            options: { responsive: true, plugins: { legend: { display: false } } }
         });
 
         const c3 = document.getElementById('adherenceDoughnut').getContext('2d');
@@ -288,7 +293,7 @@ async function fetchAnalytics() {
         charts.adherence = new Chart(c3, {
             type: 'doughnut',
             data: { labels: ['>90% (Safe)', '75-90% (Warning)', '<75% (Critical)'], datasets: [{ data: [25, 15, 10], backgroundColor: ['#10B981', '#F59E0B', '#EF4444'], borderWidth: 0 }] },
-            options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'right', labels: { color: '#94A3B8' } } } }
+            options: { responsive: true, cutout: '70%', plugins: { legend: { position: 'right', labels: { color: '#94A3B8' } } } }
         });
         
         const c4 = document.getElementById('alertHeatmap').getContext('2d');
@@ -296,10 +301,17 @@ async function fetchAnalytics() {
         charts.heatmap = new Chart(c4, {
             type: 'line',
             data: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], datasets: [{ label: 'Alert Frequency', data: [2, 5, 1, 8, 3, 2, 0], borderColor: '#EF4444', backgroundColor: 'rgba(239, 68, 68, 0.2)', fill: true, stepped: true }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            options: { responsive: true, plugins: { legend: { display: false } } }
         });
         
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+        console.error("Analytics Fetch Error: ", e); 
+        const errorBox = document.createElement('div');
+        errorBox.style = "background: #EF4444; color: white; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;";
+        errorBox.innerHTML = `<strong>Error Rendering Charts:</strong><br><pre>${e.message}</pre>`;
+        const container = document.getElementById('complianceChart').parentElement;
+        container.appendChild(errorBox);
+    }
 }
 
 // --- Doctor Clinical View ---
