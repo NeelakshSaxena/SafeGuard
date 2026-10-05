@@ -1,8 +1,5 @@
 # SafeGuard – Elderly Care Coordination Platform
 
-**Team**: Neelaksh Saxena (24BCE2059), Kushl Goel (24BCE2106), Parth Khanayat (24BDS0299)  
-**Course**: BCSE302P – Database Systems Lab  
-
 SafeGuard is an integrated, database-centric elderly care coordination platform. It combines real-time location tracking, health event logging, multi-caregiver coordination, and predictive risk analytics to provide a centralized hub for tracking and managing the safety of elderly family members.
 
 ##  Key Features (v2.0 UI/UX Overhaul)
