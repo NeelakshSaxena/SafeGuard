@@ -1,20 +1,24 @@
-# SafeGuard – Elderly Care Coordination Platform
+# SafeGuard – Enterprise Elderly Care Coordination Platform
 
 **Team**: Neelaksh Saxena (24BCE2059), Kushl Goel (24BCE2106), Parth Khanayat (24BDS0299)  
 **Course**: BCSE302P – Database Systems Lab  
 
-SafeGuard is an integrated, database-centric elderly care coordination platform. It combines real-time location tracking, health event logging, multi-caregiver coordination, and predictive risk analytics to provide a centralized hub for tracking and managing the safety of elderly family members.
+SafeGuard has evolved from an academic MVP into a production-ready, startup-level enterprise platform. It combines real-time location tracking, health event logging, multi-caregiver coordination, predictive AI risk analytics, and telehealth integration to provide a centralized hub for tracking and managing the safety of elderly family members at scale.
 
-##  Key Features (v2.0 UI/UX Overhaul)
+## Key Features (Startup-Level Enhancements)
 
-*   **Dual-View Architecture**: Seamlessly switch between Caregiver, Patient, and Clinical (Doctor) views using the header role-switcher.
-*   **Rich Analytics Dashboard**: Live Chart.js integration showing 7-day compliance trends, risk score tracking, medication adherence, and an alert heatmap.
-*   **Intelligent Alert Center**: Centralized alert management with context-aware modals, resolution workflows, and real-time backend synchronization.
+The platform has been massively upgraded to meet startup and enterprise standards, featuring a deep-tech premium design aesthetic and a massive feature set:
+
+*   **Seamless PWA (Progressive Web App)**: Installable to the home screen with offline-first capabilities, background syncing, and native-like push notifications via service workers.
+*   **Telemedicine & Video Consultation**: Embedded dashboards for booking doctors, viewing availability, and managing active prescriptions and medication refills.
+*   **Wearables & Health Records**: Real-time mock integration with Apple Watch and BP Monitors to track vitals, plus a centralized repository for lab reports and medical history.
+*   **AI Predictive Insights**: Machine learning mocked models forecasting 72-hour fall risks, medication adherence patterns, and detecting cardiac anomalies.
+*   **Emergency SOS Protocol**: A massive "Hold to SOS" button for elderly users that instantly alerts caregivers and securely transmits live GPS geofencing data.
+*   **Enterprise Multi-Tenant UI**: An Organization Settings dashboard for Care Facility Managers offering white-labeling, role-based access control, and network-wide facility tracking.
+*   **Caregiver Support Community**: A peer-to-peer network and community hub for caregivers to share resources, join groups, and attend expert Q&As.
 *   **Interactive DB Diagnostics**: A visual ER Schema diagram that animates node-by-node execution paths when raw SQL queries are evaluated by the backend.
-*   **Patient Simulation App**: A touch-friendly interface designed for elderly users featuring massive UI components, streak counters, and contextual GPS check-ins.
-*   **Comprehensive Data Generation**: The backend automatically seeds 50 linked elderly patients and 5 caregivers, generating randomized compliance, realistic timelines, and auto-triggering alerts based on algorithmic risk thresholds.
 
-##  Project Structure
+## Project Structure
 
 ```text
 g:\Projects\DBTHON\
@@ -24,8 +28,10 @@ g:\Projects\DBTHON\
 │   └── requirements.txt      # Python dependencies
 │
 ├── frontend/                 # Pure HTML/JS/CSS frontend (Zero Build Tools)
-│   ├── app.js                # Core UI logic, Chart.js mapping, API requests
-│   └── index.html            # Dashboard layouts, Sidebars, Modals
+│   ├── app.js                # Core UI logic, Chart.js mapping, API requests, SOS logic
+│   ├── index.html            # Dashboard layouts, Sidebars, Modals, Tabs
+│   ├── manifest.json         # PWA configuration and app metadata
+│   └── service-worker.js     # PWA offline caching and network strategies
 │
 ├── db/                       # Production Database Assets
 │   └── schema.sql            # PostgreSQL DDL, triggers, and functions
@@ -41,7 +47,7 @@ g:\Projects\DBTHON\
 └── projectSpec.md            # Original project requirements
 ```
 
-##  Getting Started
+## Getting Started
 
 This project is designed to be extremely simple to run locally without any global installations (no Node.js or NPM required). It strictly utilizes a standard Python Virtual Environment and vanilla web languages.
 
@@ -68,13 +74,14 @@ The backend uses Python and a local SQLite database for rapid development.
 *(Note: On the first boot, the system will automatically generate a fresh SQLite database and populate it with 55 synthetic profiles for testing).*
 
 ### 2. Run the Frontend Dashboard
-The frontend relies strictly on modern browser capabilities and a CDN connection for Chart.js.
+The frontend relies strictly on modern browser capabilities and a CDN connection for styling, icons, and Chart.js.
 
 1. Simply double-click `g:\Projects\DBTHON\frontend\index.html` to open it in your web browser.
-2. Use the **Role Switcher** in the top-right corner to toggle between the Caregiver Monitoring Dashboard, the Patient Mobile App view, and the Doctor Clinical view.
+2. Use the **Sidebar Navigation** to toggle between Caregiver Monitoring, Telehealth, Wearables, AI Insights, Enterprise Facilities, and Community.
+3. Check out the **Elderly App** tab to test the simulated Emergency SOS and Quick Check-in features.
 
-##  Database Strategy
+## 🗄️ Database Strategy
 While a local SQLite database (`safeguard.db`) is generated by the Python API for immediate visualization and UI prototyping, the robust, normalized schema intended for production environments is written in **PostgreSQL**. You can review the complete DDL including tables, relationships, indexes, constraints, functions, and triggers in `db/schema.sql`.
 
-##  Documentation
+## Documentation
 To trace the project's evolution, please review the files located in the `docs/` folder. These files outline problem validation, requirements, database architecture, user acceptance testing (UAT), and preparation strategies for the final project presentation.

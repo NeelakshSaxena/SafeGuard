@@ -4,28 +4,31 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SafeGuard Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#6366f1">
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         :root {
-            --primary: #4F46E5;
-            --primary-hover: #4338CA;
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
             --success: #10B981;
             --danger: #EF4444;
             --warning: #F59E0B;
-            --bg: #0F172A;
-            --surface: #1E293B;
-            --surface-hover: #334155;
-            --text-main: #F8FAFC;
-            --text-muted: #94A3B8;
-            --border: #334155;
+            --bg: #0a0a0a;
+            --surface: #121212;
+            --surface-hover: #1e1e1e;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: rgba(255,255,255,0.1);
             --sidebar-width: 250px;
         }
         
         * { box-sizing: border-box; margin: 0; padding: 0; }
         
-        body { font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text-main); line-height: 1.5; overflow-x: hidden; }
+        body { font-family: 'Outfit', sans-serif; background-color: var(--bg); color: var(--text-main); line-height: 1.6; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
         
         /* Navbar */
         .navbar { background-color: var(--surface); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
@@ -181,12 +184,33 @@
                 <div class="nav-item" onclick="switchTab('analytics')" data-tab="analytics">
                     <i class="fa-solid fa-chart-pie"></i> Analytics & Trends
                 </div>
+                <div class="nav-item" onclick="switchTab('ai-insights')" data-tab="ai-insights">
+                    <i class="fa-solid fa-brain"></i> AI Predictions
+                </div>
+                <div class="nav-item" onclick="switchTab('live-location')" data-tab="live-location">
+                    <i class="fa-solid fa-map-location-dot"></i> Live Location
+                </div>
+                <div class="nav-item" onclick="switchTab('facilities')" data-tab="facilities">
+                    <i class="fa-solid fa-building-user"></i> Facilities
+                </div>
+                <div class="nav-item" onclick="switchTab('admin')" data-tab="admin">
+                    <i class="fa-solid fa-shield-halved"></i> Org Settings
+                </div>
+                <div class="nav-item" onclick="switchTab('community')" data-tab="community">
+                    <i class="fa-solid fa-users-rays"></i> Community
+                </div>
             </div>
             
             <div class="nav-group doctor-only" style="display:none;">
                 <div class="text-muted" style="font-size: 0.75rem; text-transform: uppercase; padding: 1rem 1.5rem 0.5rem;">Clinical</div>
                 <div class="nav-item" onclick="switchTab('clinical')" data-tab="clinical">
                     <i class="fa-solid fa-stethoscope"></i> Clinical Overview
+                </div>
+                <div class="nav-item" onclick="switchTab('telehealth')" data-tab="telehealth">
+                    <i class="fa-solid fa-video"></i> Telemedicine
+                </div>
+                <div class="nav-item" onclick="switchTab('records')" data-tab="records">
+                    <i class="fa-solid fa-file-medical"></i> Health Records
                 </div>
             </div>
 
@@ -195,6 +219,15 @@
                 <div class="text-muted" style="font-size: 0.75rem; text-transform: uppercase; padding: 1rem 1.5rem 0.5rem;">My App</div>
                 <div class="nav-item" onclick="switchTab('elderly-app')" data-tab="elderly-app">
                     <i class="fa-solid fa-mobile-screen"></i> My Dashboard
+                </div>
+                <div class="nav-item" onclick="switchTab('telehealth')" data-tab="telehealth">
+                    <i class="fa-solid fa-user-doctor"></i> Consult Doctor
+                </div>
+                <div class="nav-item" onclick="switchTab('prescriptions')" data-tab="prescriptions">
+                    <i class="fa-solid fa-pills"></i> Medications
+                </div>
+                <div class="nav-item" onclick="switchTab('wearables')" data-tab="wearables">
+                    <i class="fa-solid fa-watch-fitness"></i> Connected Devices
                 </div>
                 <div class="nav-item" onclick="switchTab('my-profile')" data-tab="my-profile">
                     <i class="fa-solid fa-address-card"></i> My Profile
@@ -352,7 +385,12 @@
                     <p class="text-success" style="font-size: 1.2rem; font-weight: 500;"><i class="fa-solid fa-fire"></i> 27 Day Safe Streak! 🎉</p>
                     <p class="text-muted" style="margin-bottom: 2rem;">Keep it up! One more day for 28!</p>
                     
-                    <button class="btn btn-success elderly-huge-btn" onclick="simulateElderlyCheckin()">
+                    <button id="sosBtn" class="btn btn-danger elderly-huge-btn" style="box-shadow: 0 0 30px rgba(239, 68, 68, 0.4); margin-bottom: 1rem; width: 100%; max-width: 300px; height: 100px; border-radius: 1rem;" onmousedown="startSOS()" onmouseup="cancelSOS()" onmouseleave="cancelSOS()" ontouchstart="startSOS()" ontouchend="cancelSOS()">
+                        🆘 HOLD FOR SOS
+                        <div id="sosProgress" style="width: 0%; height: 5px; background: white; margin-top: 10px; transition: width 0.1s linear;"></div>
+                    </button>
+                    
+                    <button class="btn btn-success elderly-huge-btn" style="margin-top: 1rem;" onclick="simulateElderlyCheckin()">
                         I'M SAFE
                     </button>
                     
@@ -381,6 +419,435 @@
                         </div>
                         <div class="d-flex justify-between align-center mb-1 text-warning">
                             <span><i class="fa-regular fa-clock"></i> 20:00 - Atenolol 50mg</span> <span>Due in 4h</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 7. TELEHEALTH -->
+            <div id="telehealth" class="tab-content">
+                <h2 class="mb-2"><i class="fa-solid fa-video"></i> Telemedicine & Video Consultation</h2>
+                <div class="grid-2">
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Available Doctors (Next 30 mins)</h3>
+                        <div style="border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 1rem;">
+                            <div class="d-flex justify-between align-center">
+                                <div>
+                                    <h4 style="margin: 0;">Dr. Patel - General Practice</h4>
+                                    <p class="text-muted" style="font-size: 0.85rem;"><span class="text-success">● Online now</span> (Next slot: In 5 mins)</p>
+                                    <p style="color: #F59E0B; font-size: 0.8rem;">⭐⭐⭐⭐⭐ (128 reviews) | ₹500/consultation</p>
+                                </div>
+                                <img src="https://ui-avatars.com/api/?name=Dr+Patel&background=10B981&color=fff&rounded=true" width="50" height="50">
+                            </div>
+                            <div class="d-flex gap-1 mt-2" style="gap: 0.5rem; margin-top: 0.5rem;">
+                                <button class="btn btn-sm btn-success w-100" onclick="alert('Video call started (Simulated)')"><i class="fa-solid fa-video"></i> Book Call</button>
+                                <button class="btn btn-sm btn-outline"><i class="fa-solid fa-message"></i> Message</button>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="d-flex justify-between align-center">
+                                <div>
+                                    <h4 style="margin: 0;">Dr. Sharma - Cardiologist</h4>
+                                    <p class="text-muted" style="font-size: 0.85rem;">Online in 2 hours (Next slot: 6:00 PM)</p>
+                                    <p style="color: #F59E0B; font-size: 0.8rem;">⭐⭐⭐⭐ (89 reviews) | ₹1500/consultation</p>
+                                </div>
+                                <img src="https://ui-avatars.com/api/?name=Dr+Sharma&background=3B82F6&color=fff&rounded=true" width="50" height="50">
+                            </div>
+                            <div class="d-flex gap-1 mt-2" style="gap: 0.5rem; margin-top: 0.5rem;">
+                                <button class="btn btn-sm btn-primary w-100"><i class="fa-solid fa-calendar"></i> Book Later</button>
+                                <button class="btn btn-sm btn-outline"><i class="fa-solid fa-message"></i> Message</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">My Upcoming Consultations</h3>
+                        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                            <div class="d-flex justify-between align-center mb-1">
+                                <strong><i class="fa-regular fa-clock text-warning"></i> Oct 8 3:00 PM - Dr. Sharma</strong>
+                                <span class="chip">Upcoming</span>
+                            </div>
+                            <p class="text-muted" style="font-size: 0.85rem;">Cardiology follow-up</p>
+                            <div class="mt-2" style="margin-top: 0.5rem; display: flex; gap: 0.5rem;">
+                                <button class="btn btn-sm btn-outline">Reschedule</button>
+                                <button class="btn btn-sm btn-outline">Add Reminder</button>
+                            </div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem;">
+                            <div class="d-flex justify-between align-center mb-1">
+                                <strong><i class="fa-solid fa-check text-success"></i> Oct 6 10:00 AM - Dr. Patel</strong>
+                                <span class="text-success" style="font-size: 0.85rem;">Completed</span>
+                            </div>
+                            <p class="text-muted" style="font-size: 0.85rem;">Notes: Continue current meds, mild headache.</p>
+                            <p class="text-success" style="font-size: 0.85rem;"><i class="fa-solid fa-file-prescription"></i> Prescription shared</p>
+                            <div class="mt-2" style="margin-top: 0.5rem; display: flex; gap: 0.5rem;">
+                                <button class="btn btn-sm btn-outline">View Notes</button>
+                                <button class="btn btn-sm btn-outline">Recording</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 8. PRESCRIPTIONS -->
+            <div id="prescriptions" class="tab-content">
+                <h2 class="mb-2"><i class="fa-solid fa-pills"></i> Medication & Prescriptions</h2>
+                <div class="grid-2">
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Active Prescriptions</h3>
+                        <div style="border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 4px solid var(--success);">
+                            <h4 style="margin: 0;">1. Metformin 1000mg</h4>
+                            <p class="text-muted" style="font-size: 0.85rem;">Prescribed by: Dr. Patel (Oct 1, 2024)</p>
+                            <p class="text-muted" style="font-size: 0.85rem;">Dosage: Once daily (morning)</p>
+                            <p class="text-success" style="font-size: 0.85rem;">Refills: 2 remaining | Pharmacy: Apollo (2km)</p>
+                            <div class="d-flex gap-1" style="margin-top: 0.5rem; gap: 0.5rem;">
+                                <button class="btn btn-sm btn-success">Refill Now</button>
+                                <button class="btn btn-sm btn-outline">Set Alert</button>
+                            </div>
+                        </div>
+                        <div style="border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 4px solid var(--warning);">
+                            <h4 style="margin: 0;">2. Atenolol 50mg</h4>
+                            <p class="text-muted" style="font-size: 0.85rem;">Prescribed by: Dr. Sharma (Sep 15)</p>
+                            <p class="text-muted" style="font-size: 0.85rem;">Dosage: Once daily (evening)</p>
+                            <p class="text-warning" style="font-size: 0.85rem;">⚠️ Refills: 0 remaining (Expiring Oct 15)</p>
+                            <div class="d-flex gap-1" style="margin-top: 0.5rem; gap: 0.5rem;">
+                                <button class="btn btn-sm btn-warning">Request Doctor Refill</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Allergies & Interactions</h3>
+                        <div style="background: rgba(239,68,68,0.1); border: 1px solid var(--danger); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                            <p class="text-danger" style="margin-bottom: 0.5rem;"><strong>⚠️ Allergic to:</strong> Penicillin</p>
+                            <p class="text-danger"><strong>⚠️ Avoid with:</strong> Alcohol (Atenolol)</p>
+                        </div>
+                        <h3 class="mb-1 mt-2 text-primary" style="margin-top: 1.5rem;">History</h3>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.5rem;">Oct 1: Prescription added (Metformin)</p>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.5rem;">Sep 30: Pharmacy delivery completed</p>
+                        <p class="text-muted" style="font-size: 0.85rem;">Sep 28: Prescription refilled (Atenolol)</p>
+                        <button class="btn btn-outline w-100" style="margin-top: 1rem; width: 100%; justify-content: center;">Download Full List</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 9. WEARABLES -->
+            <div id="wearables" class="tab-content">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h2><i class="fa-solid fa-watch-fitness"></i> Connected Devices</h2>
+                    <button class="btn btn-primary"><i class="fa-solid fa-plus"></i> Add Device</button>
+                </div>
+                <div class="grid-3">
+                    <div class="card" style="border-left: 4px solid var(--success);">
+                        <div class="d-flex justify-between align-center mb-1">
+                            <h3 style="margin: 0;"><i class="fa-brands fa-apple"></i> Apple Watch</h3>
+                            <span class="text-success" style="font-size: 0.85rem;">✓ Connected (87%)</span>
+                        </div>
+                        <ul style="list-style: none; padding: 0; margin-bottom: 1rem; font-size: 0.9rem;">
+                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span class="text-muted">Heart Rate</span> <span>78 bpm (normal)</span></li>
+                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span class="text-muted">Blood O2</span> <span>98%</span></li>
+                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span class="text-muted">Sleep</span> <span>7h 22m</span></li>
+                            <li style="display: flex; justify-content: space-between;"><span class="text-muted">Steps Today</span> <span>8,234</span></li>
+                        </ul>
+                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">Manage Settings</button>
+                    </div>
+                    <div class="card" style="border-left: 4px solid var(--success);">
+                        <div class="d-flex justify-between align-center mb-1">
+                            <h3 style="margin: 0;"><i class="fa-solid fa-heart-pulse"></i> BP Monitor</h3>
+                            <span class="text-success" style="font-size: 0.85rem;">✓ Connected (Last 1h)</span>
+                        </div>
+                        <ul style="list-style: none; padding: 0; margin-bottom: 1rem; font-size: 0.9rem;">
+                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span class="text-muted">Systolic</span> <span>128 mmHg</span></li>
+                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span class="text-muted">Diastolic</span> <span>82 mmHg</span></li>
+                            <li style="display: flex; justify-content: space-between;"><span class="text-muted">Pulse</span> <span>76 bpm</span></li>
+                        </ul>
+                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">View Trends</button>
+                    </div>
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Daily Activity Ring</h3>
+                        <div style="text-align: center; padding: 1rem 0;">
+                            <div style="position: relative; width: 120px; height: 120px; margin: 0 auto; border-radius: 50%; border: 10px solid var(--border); border-top-color: var(--success); transform: rotate(-45deg);">
+                                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(45deg); font-size: 1.5rem; font-weight: bold; color: var(--success);">100%</div>
+                            </div>
+                            <p class="text-muted" style="margin-top: 1rem;">All activity goals met!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 10. HEALTH RECORDS -->
+            <div id="records" class="tab-content">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h2><i class="fa-solid fa-file-medical"></i> Health Records & Labs</h2>
+                    <button class="btn btn-primary"><i class="fa-solid fa-upload"></i> Upload Record</button>
+                </div>
+                <div class="grid-2">
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Recent Lab Reports</h3>
+                        <div style="border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 1rem;">
+                            <div class="d-flex justify-between mb-1">
+                                <h4 style="margin: 0;">Blood Test (Oct 1, 2024)</h4>
+                                <span class="chip" style="background: var(--success); color: white; border:none; padding: 2px 8px; font-size: 0.75rem;">Results Ready</span>
+                            </div>
+                            <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.5rem;">Metropolis Healthcare</p>
+                            <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Glucose:</span> <span class="text-warning">118 mg/dL (High)</span></div>
+                            <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>HbA1c:</span> <span class="text-warning">6.8% (Prediabetic)</span></div>
+                            <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>LDL:</span> <span class="text-success">135 mg/dL</span></div>
+                            <div class="d-flex gap-1 mt-2" style="margin-top: 0.75rem; gap: 0.5rem;">
+                                <button class="btn btn-sm btn-outline"><i class="fa-solid fa-file-pdf"></i> View PDF</button>
+                                <button class="btn btn-sm btn-outline"><i class="fa-solid fa-share-nodes"></i> Share</button>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="d-flex justify-between mb-1">
+                                <h4 style="margin: 0;">Lipid Panel (Sep 15, 2024)</h4>
+                                <span class="chip" style="background: var(--success); color: white; border:none; padding: 2px 8px; font-size: 0.75rem;">Results Ready</span>
+                            </div>
+                            <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.5rem;">Max Lab</p>
+                            <button class="btn btn-sm btn-outline"><i class="fa-solid fa-file-pdf"></i> View PDF</button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Documents & Trends</h3>
+                        <div style="background: var(--bg); padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border); margin-bottom: 1.5rem;">
+                            <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem;">Glucose Levels Trend (12m)</h4>
+                            <div class="d-flex justify-between text-muted" style="font-size: 0.85rem;"><span>Oct 1:</span> <span>118 mg/dL</span></div>
+                            <div class="d-flex justify-between text-muted" style="font-size: 0.85rem;"><span>Jul 15:</span> <span>115 mg/dL</span></div>
+                            <div class="d-flex justify-between text-muted" style="font-size: 0.85rem;"><span>Apr 22:</span> <span>112 mg/dL</span></div>
+                            <div class="d-flex justify-between text-muted" style="font-size: 0.85rem;"><span>Jan 10:</span> <span>110 mg/dL</span></div>
+                            <p class="text-warning mt-1" style="font-size: 0.85rem; margin-top: 0.5rem;"><i class="fa-solid fa-arrow-trend-up"></i> Trend: Slightly increasing. Monitor diet.</p>
+                        </div>
+                        <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem;">Static Documents</h4>
+                        <ul style="list-style: none; padding: 0; margin-bottom: 1rem; font-size: 0.9rem;">
+                            <li style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"><i class="fa-solid fa-file-pdf text-danger"></i> Allergy Card</li>
+                            <li style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"><i class="fa-solid fa-file-pdf text-danger"></i> Vaccination Cert</li>
+                            <li style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"><i class="fa-solid fa-image text-primary"></i> X-Ray Results (Oct)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 11. LIVE LOCATION -->
+            <div id="live-location" class="tab-content">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h2><i class="fa-solid fa-map-location-dot"></i> Live Location Tracking</h2>
+                    <button class="btn btn-outline"><i class="fa-solid fa-gear"></i> Geofence Settings</button>
+                </div>
+                <div class="grid-2">
+                    <div class="card" style="padding: 0; overflow: hidden; min-height: 400px; background: #2a3a4c; display: flex; align-items: center; justify-content: center; position: relative;">
+                        <!-- Mock Map -->
+                        <div style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.5); padding: 0.5rem; border-radius: 0.25rem; font-size: 0.8rem;">
+                            <i class="fa-solid fa-satellite-dish text-success"></i> GPS Active
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="width: 200px; height: 200px; border-radius: 50%; border: 2px dashed var(--success); background: rgba(16,185,129,0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto; position: relative;">
+                                <i class="fa-solid fa-house" style="position: absolute; top: 20px; color: var(--success); font-size: 1.5rem;"></i>
+                                <div style="width: 15px; height: 15px; background: var(--primary); border-radius: 50%; border: 2px solid white; box-shadow: 0 0 10px var(--primary); position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);"></div>
+                            </div>
+                            <p class="mt-2" style="margin-top: 1rem; font-weight: bold;">📍 Safe Zone: Home</p>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Location History & Geofencing</h3>
+                        <div style="background: var(--bg); padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border); margin-bottom: 1rem;">
+                            <h4 style="margin: 0 0 0.5rem 0;">Current Status</h4>
+                            <p class="text-success" style="margin: 0; font-size: 1.1rem;"><i class="fa-solid fa-check-circle"></i> At Home</p>
+                            <p class="text-muted" style="font-size: 0.85rem; margin-top: 0.25rem;">Last updated: Just now | Accuracy: 20m</p>
+                        </div>
+                        <h4 style="margin: 1.5rem 0 0.5rem 0; font-size: 0.9rem;">Events (Last 24h)</h4>
+                        <div style="border-left: 2px solid var(--border); margin-left: 0.5rem; padding-left: 1rem;">
+                            <div style="position: relative; margin-bottom: 1rem;">
+                                <div style="position: absolute; left: -1.4rem; top: 0.25rem; width: 10px; height: 10px; background: var(--success); border-radius: 50%;"></div>
+                                <p style="margin: 0; font-size: 0.9rem;">11:00 AM - Returned home</p>
+                            </div>
+                            <div style="position: relative; margin-bottom: 1rem;">
+                                <div style="position: absolute; left: -1.4rem; top: 0.25rem; width: 10px; height: 10px; background: var(--text-muted); border-radius: 50%;"></div>
+                                <p style="margin: 0; font-size: 0.9rem;">10:45 AM - Exited pharmacy</p>
+                            </div>
+                            <div style="position: relative; margin-bottom: 1rem;">
+                                <div style="position: absolute; left: -1.4rem; top: 0.25rem; width: 10px; height: 10px; background: var(--primary); border-radius: 50%;"></div>
+                                <p style="margin: 0; font-size: 0.9rem;">10:15 AM - Entered pharmacy</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 12. FACILITIES (ENTERPRISE) -->
+            <div id="facilities" class="tab-content">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h2><i class="fa-solid fa-building-user"></i> Network Facilities</h2>
+                    <button class="btn btn-primary"><i class="fa-solid fa-plus"></i> Add Facility</button>
+                </div>
+                <div class="grid-3">
+                    <div class="card" style="border-top: 4px solid var(--primary);">
+                        <h3 class="mb-1">Apollo Care - Delhi</h3>
+                        <p class="text-success" style="font-size: 0.85rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-circle-check"></i> Active (85 elderly)</p>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Manager: Priya Kumar</p>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Staff:</span> <span>15 (3 Docs, 8 Nurses)</span></div>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Alerts Today:</span> <span class="text-danger">3 pending</span></div>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;"><span>Avg Response:</span> <span>12 mins</span></div>
+                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">Manage Facility</button>
+                    </div>
+                    <div class="card" style="border-top: 4px solid var(--primary);">
+                        <h3 class="mb-1">Apollo Care - Mumbai</h3>
+                        <p class="text-success" style="font-size: 0.85rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-circle-check"></i> Active (65 elderly)</p>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Manager: Raj Singh</p>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Staff:</span> <span>12 (2 Docs, 6 Nurses)</span></div>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Alerts Today:</span> <span class="text-warning">1 pending</span></div>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;"><span>Avg Response:</span> <span>9 mins</span></div>
+                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">Manage Facility</button>
+                    </div>
+                    <div class="card" style="border-top: 4px solid var(--primary);">
+                        <h3 class="mb-1">Apollo Care - Bangalore</h3>
+                        <p class="text-success" style="font-size: 0.85rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-circle-check"></i> Active (30 elderly)</p>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Manager: Anita Desai</p>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Staff:</span> <span>8 (1 Doc, 4 Nurses)</span></div>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Alerts Today:</span> <span class="text-success">0 pending</span></div>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;"><span>Avg Response:</span> <span>8 mins</span></div>
+                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">Manage Facility</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 13. AI PREDICTIONS -->
+            <div id="ai-insights" class="tab-content">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h2><i class="fa-solid fa-brain text-primary"></i> AI Predictive Analytics</h2>
+                    <button class="btn btn-outline"><i class="fa-solid fa-arrows-rotate"></i> Refresh Models</button>
+                </div>
+                <div class="grid-2 mb-2">
+                    <div class="card" style="border-top: 4px solid var(--danger);">
+                        <h3 class="mb-1">Fall Risk Prediction (72h Forecast)</h3>
+                        <p class="text-danger" style="font-size: 2rem; font-weight: bold; margin: 0;">72% <span style="font-size: 1rem; font-weight: normal;" class="text-muted">High Risk: Alice</span></p>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Based on: Heart rate irregular, activity down 40%, new medication</p>
+                        <div style="background: rgba(239,68,68,0.1); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                            <h4 class="text-danger" style="margin: 0 0 0.5rem 0;">Recommendation</h4>
+                            <p style="margin: 0; font-size: 0.9rem;">Physical therapy evaluation needed. Monitor closely.</p>
+                        </div>
+                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">View Detailed Analysis</button>
+                    </div>
+                    <div class="card" style="border-top: 4px solid var(--warning);">
+                        <h3 class="mb-1">Medication Adherence Forecast</h3>
+                        <p class="text-warning" style="font-size: 2rem; font-weight: bold; margin: 0;">68% <span style="font-size: 1rem; font-weight: normal;" class="text-muted">Predicted: Bob</span></p>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Based on: Weekend pattern (often forgets Sundays)</p>
+                        <div style="background: rgba(245,158,11,0.1); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                            <h4 class="text-warning" style="margin: 0 0 0.5rem 0;">Recommendation</h4>
+                            <p style="margin: 0; font-size: 0.9rem;">Sister to call Sundays 10 AM. Adjust reminder times.</p>
+                        </div>
+                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">Adjust Reminders</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3 class="mb-1 text-primary">Health Event Anomaly Detection</h3>
+                    <table style="width: 100%;">
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 1rem 0;"><span class="text-danger"><i class="fa-solid fa-heart-crack"></i> Cardiac Anomaly</span></td>
+                            <td class="text-muted">Carol's HR spiked to 112 bpm (normally 72)</td>
+                            <td><button class="btn btn-sm btn-danger">Alert Doctor</button></td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 1rem 0;"><span class="text-warning"><i class="fa-solid fa-bed"></i> Sleep Pattern Anomaly</span></td>
+                            <td class="text-muted">Diana's sleep dropped 50% over 3 days</td>
+                            <td><button class="btn btn-sm btn-outline">Check-in</button></td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 14. ADMIN / ORG SETTINGS -->
+            <div id="admin" class="tab-content">
+                <h2 class="mb-2"><i class="fa-solid fa-shield-halved"></i> Organization Settings</h2>
+                <div class="grid-2">
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Brand Customization (White-Label)</h3>
+                        <div style="margin-bottom: 1rem;">
+                            <label class="text-muted" style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Organization Name</label>
+                            <input type="text" value="Apollo Senior Care" style="width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text-main); padding: 0.5rem; border-radius: 0.25rem;">
+                        </div>
+                        <div class="d-flex gap-1 mb-1">
+                            <div style="flex:1;">
+                                <label class="text-muted" style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Primary Color</label>
+                                <input type="color" value="#4F46E5" style="width: 100%; height: 40px; border: none; background: transparent; cursor: pointer;">
+                            </div>
+                            <div style="flex:1;">
+                                <label class="text-muted" style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Secondary Color</label>
+                                <input type="color" value="#10B981" style="width: 100%; height: 40px; border: none; background: transparent; cursor: pointer;">
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 1rem;">
+                            <label class="text-muted" style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Custom Portal URL</label>
+                            <input type="text" value="apollo.safeguard.health" style="width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text-main); padding: 0.5rem; border-radius: 0.25rem;">
+                        </div>
+                        <button class="btn btn-primary w-100" style="width: 100%; justify-content: center;">Save Brand Settings</button>
+                    </div>
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Staff & Subscription (Premium Tier)</h3>
+                        <div class="d-flex justify-between text-muted" style="margin-bottom: 0.5rem;"><span>Total Users:</span> <span>45 / 100</span></div>
+                        <div class="d-flex justify-between text-muted" style="margin-bottom: 0.5rem;"><span>HIPAA Compliance:</span> <span class="text-success">✓ Enabled</span></div>
+                        <div class="d-flex justify-between text-muted" style="margin-bottom: 1.5rem;"><span>Billing Cycle:</span> <span>Nov 1, 2024</span></div>
+                        
+                        <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem;">Feature Access</h4>
+                        <ul style="list-style: none; padding: 0; margin-bottom: 1rem; font-size: 0.9rem;">
+                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span>Telehealth</span> <span class="text-success">Enabled</span></li>
+                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span>Wearable Integration</span> <span class="text-success">Enabled</span></li>
+                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span>API Access</span> <span class="text-danger">Not in plan</span></li>
+                        </ul>
+                        <button class="btn btn-outline w-100" style="width: 100%; justify-content: center;">Upgrade Plan</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 15. COMMUNITY -->
+            <div id="community" class="tab-content">
+                <h2 class="mb-2"><i class="fa-solid fa-users-rays"></i> Caregiver Support Network</h2>
+                <div class="filter-bar">
+                    <button class="chip active">My Groups</button>
+                    <button class="chip">Discover</button>
+                    <button class="chip">Expert Q&A</button>
+                    <input type="text" class="search-bar" style="margin-left: auto;" placeholder="Search groups...">
+                </div>
+                <div class="grid-2">
+                    <div class="card">
+                        <div class="d-flex justify-between align-center mb-1">
+                            <h3 style="margin: 0; font-size: 1.2rem;">Daughters Caring for Elderly Parents</h3>
+                            <span class="text-primary" style="font-size: 0.85rem;"><i class="fa-solid fa-users"></i> 2,340 members</span>
+                        </div>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Admin: Dr. Sharma (Geriatric Specialist)</p>
+                        
+                        <div style="background: var(--bg); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border: 1px solid var(--border);">
+                            <div class="d-flex gap-1 align-center mb-1">
+                                <img src="https://ui-avatars.com/api/?name=Priya&background=E879F9&color=fff&rounded=true" width="30" height="30">
+                                <div>
+                                    <strong style="font-size: 0.9rem;">Priya</strong>
+                                    <span class="text-muted" style="font-size: 0.75rem;">• 2 hours ago</span>
+                                </div>
+                            </div>
+                            <p style="font-size: 0.9rem; margin-bottom: 0.5rem;">My mom fell yesterday. How do I prevent this from happening again?</p>
+                            <div class="d-flex gap-1 text-muted" style="font-size: 0.8rem;">
+                                <span><i class="fa-regular fa-heart"></i> 1.2k</span>
+                                <span><i class="fa-regular fa-comment"></i> 245 replies</span>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline w-100" style="width: 100%; justify-content: center;">Write Post</button>
+                    </div>
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Resources & Upcoming Events</h3>
+                        <div style="margin-bottom: 1.5rem;">
+                            <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem;">Pinned Articles</h4>
+                            <ul style="list-style: none; padding: 0; font-size: 0.9rem;">
+                                <li style="margin-bottom: 0.5rem; color: var(--primary); cursor: pointer;"><i class="fa-solid fa-book-open"></i> 10 Fall Prevention Strategies</li>
+                                <li style="margin-bottom: 0.5rem; color: var(--primary); cursor: pointer;"><i class="fa-solid fa-book-open"></i> Medication Management Tips</li>
+                                <li style="margin-bottom: 0.5rem; color: var(--primary); cursor: pointer;"><i class="fa-solid fa-book-open"></i> Dealing with Caregiver Burnout</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem;">Live Events</h4>
+                            <div style="background: rgba(16,185,129,0.1); padding: 0.75rem; border-radius: 0.5rem; border-left: 3px solid var(--success);">
+                                <strong>Oct 15, 7 PM - Live Q&A: Fall Prevention</strong>
+                                <div class="d-flex justify-between align-center mt-1" style="margin-top: 0.5rem;">
+                                    <span class="text-success" style="font-size: 0.8rem;">Starting in 3 days</span>
+                                    <button class="btn btn-sm btn-success">RSVP</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -477,5 +944,16 @@
     </style>
 
     <script src="app.js?v=2"></script>
-</body>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then((registration) => {
+              console.log('ServiceWorker registration successful with scope: ', registration.scope);
+            }, (error) => {
+              console.log('ServiceWorker registration failed: ', error);
+            });
+        });
+      }
+    </script>
 </html>

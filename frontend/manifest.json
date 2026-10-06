@@ -1,0 +1,65 @@
+{
+  "name": "SafeGuard – Elderly Care Companion",
+  "short_name": "SafeGuard",
+  "description": "Real-time elderly care coordination and safety monitoring",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6366f1",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  
+  "icons": [
+    {
+      "src": "/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  
+  "screenshots": [
+    {
+      "src": "/screenshots/screenshot-1.png",
+      "sizes": "540x720",
+      "type": "image/png"
+    }
+  ],
+  
+  "shortcuts": [
+    {
+      "name": "Quick Check-in",
+      "short_name": "Check-in",
+      "description": "Submit daily safety check-in",
+      "url": "/?tab=elderly-app",
+      "icons": [{ "src": "/icons/checkin.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "View Alerts",
+      "short_name": "Alerts",
+      "description": "See pending alerts and notifications",
+      "url": "/?tab=alerts",
+      "icons": [{ "src": "/icons/alerts.png", "sizes": "96x96" }]
+    }
+  ],
+  
+  "categories": ["health", "medical"]
+}

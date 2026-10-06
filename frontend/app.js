@@ -447,3 +447,25 @@ async function submitCheckinPayload(elderId, lat, lng, type) {
         });
     } catch (e) { console.error(e); }
 }
+
+// SOS Logic
+let sosTimeout;
+let sosProgressInterval;
+function startSOS() {
+    const bar = document.getElementById('sosProgress');
+    bar.style.transition = 'width 3s linear';
+    bar.style.width = '100%';
+    
+    sosTimeout = setTimeout(() => {
+        alert('🆘 EMERGENCY SOS TRIGGERED!\n\n1. Calling Primary Caregiver\n2. Sharing live location\n3. Alerting all assigned staff');
+        submitCheckinPayload(1, 0, 0, 'SOS');
+        cancelSOS();
+    }, 3000);
+}
+
+function cancelSOS() {
+    clearTimeout(sosTimeout);
+    const bar = document.getElementById('sosProgress');
+    bar.style.transition = 'width 0.1s linear';
+    bar.style.width = '0%';
+}
