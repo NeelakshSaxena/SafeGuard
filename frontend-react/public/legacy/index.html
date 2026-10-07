@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeGuard Dashboard</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#6366f1">
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --success: #10B981;
+            --danger: #EF4444;
+            --warning: #F59E0B;
+            --bg: #0a0a0a;
+            --surface: #121212;
+            --surface-hover: #1e1e1e;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: rgba(255,255,255,0.1);
+            --sidebar-width: 250px;
+        }
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body { font-family: 'Outfit', sans-serif; background-color: var(--bg); color: var(--text-main); line-height: 1.6; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+        
+        /* Navbar */
+        .navbar { background-color: var(--surface); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+        .nav-brand { font-size: 1.5rem; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 0.5rem; }
+        .nav-actions { display: flex; align-items: center; gap: 1.5rem; }
+        .bell-icon { position: relative; cursor: pointer; color: var(--text-muted); }
+        .bell-icon:hover { color: var(--text-main); }
+        .badge { position: absolute; top: -5px; right: -8px; background: var(--danger); color: white; font-size: 0.7rem; padding: 2px 5px; border-radius: 10px; font-weight: bold; }
+        
+        /* Role Switcher */
+        .role-switcher { background: var(--bg); border: 1px solid var(--border); color: var(--text-main); padding: 0.4rem 1rem; border-radius: 20px; outline: none; cursor: pointer; font-family: 'Inter', sans-serif; }
+        
+        /* Layout */
+        .app-container { display: flex; min-height: calc(100vh - 70px); position: relative; }
+        
+        /* Sidebar Navigation */
+        .sidebar { width: var(--sidebar-width); background-color: var(--surface); border-right: 1px solid var(--border); padding: 1.5rem 0; display: flex; flex-direction: column; transition: 0.3s; }
+        .nav-item { padding: 0.75rem 1.5rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 1rem; transition: all 0.2s; border-left: 3px solid transparent; }
+        .nav-item:hover { color: var(--text-main); background: rgba(255,255,255,0.02); }
+        .nav-item.active { color: var(--primary); border-left-color: var(--primary); background: rgba(79, 70, 229, 0.1); font-weight: 500; }
+        
+        /* Main Content */
+        .main-content { flex: 1; padding: 2rem; overflow-y: auto; transition: 0.3s; position: relative; }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Cards & Grids */
+        .grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+        .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+        
+        .card { background: var(--surface); border-radius: 0.5rem; padding: 1.5rem; border: 1px solid var(--border); position: relative; overflow: hidden; }
+        .card-interactive { cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+        .card-interactive:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); border-color: var(--primary); }
+        
+        /* Dashboard Enhancements */
+        .stat-banner { display: flex; gap: 1.5rem; margin-bottom: 2rem; }
+        .stat-box { flex: 1; background: var(--surface); padding: 1.25rem; border-radius: 0.5rem; border: 1px solid var(--border); display: flex; align-items: center; gap: 1rem; position: relative; }
+        .stat-icon { font-size: 2rem; }
+        .stat-val { font-size: 1.75rem; font-weight: bold; line-height: 1; }
+        .stat-label { color: var(--text-muted); font-size: 0.875rem; margin-top: 0.25rem; }
+        .trend-up { color: var(--success); font-size: 0.8rem; }
+        .trend-down { color: var(--danger); font-size: 0.8rem; }
+        
+        .filter-bar { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; align-items: center; flex-wrap: wrap; }
+        .chip { background: var(--bg); border: 1px solid var(--border); color: var(--text-muted); padding: 0.4rem 1rem; border-radius: 20px; font-size: 0.875rem; cursor: pointer; transition: all 0.2s;}
+        .chip:hover, .chip.active { background: var(--primary); color: white; border-color: var(--primary); }
+        .search-bar { background: var(--bg); border: 1px solid var(--border); color: white; padding: 0.4rem 1rem; border-radius: 20px; outline: none; margin-left: auto; width: 250px; }
+        
+        /* Patient Details Sidebar (Slide-in) */
+        .patient-sidebar { position: absolute; right: -450px; top: 0; width: 450px; height: 100%; background: var(--surface); border-left: 1px solid var(--border); z-index: 50; transition: right 0.3s ease; box-shadow: -5px 0 15px rgba(0,0,0,0.5); overflow-y: auto; padding: 2rem; }
+        .patient-sidebar.open { right: 0; }
+        .close-sidebar { position: absolute; top: 1rem; right: 1.5rem; cursor: pointer; font-size: 1.25rem; color: var(--text-muted); }
+        .close-sidebar:hover { color: var(--text-main); }
+        
+        /* Alert Modal */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 200; }
+        .modal-overlay.active { display: flex; }
+        .modal-content { background: var(--surface); border: 1px solid var(--border); border-radius: 0.5rem; padding: 2rem; width: 600px; max-width: 90%; }
+        
+        /* Buttons */
+        .btn { background: var(--primary); color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.375rem; font-weight: 500; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn:hover { background: var(--primary-hover); }
+        .btn-success { background: var(--success); }
+        .btn-success:hover { background: #059669; }
+        .btn-danger { background: var(--danger); }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-main); }
+        .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+        
+        /* Elderly App Specific */
+        .elderly-huge-btn { width: 250px; height: 250px; border-radius: 50%; font-size: 2rem; box-shadow: 0 0 30px rgba(16,185,129,0.2); font-weight: bold; margin: 2rem auto; display: block; cursor: pointer; transition: transform 0.1s;}
+        .elderly-huge-btn:active { transform: scale(0.95); }
+        .quick-action-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; max-width: 600px; margin: 0 auto; }
+        .action-btn { background: var(--surface); border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem; color: var(--text-main); font-size: 1.1rem; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+        .action-btn:hover { background: var(--surface-hover); }
+        .action-btn i { font-size: 1.5rem; color: var(--primary); }
+        
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+        th { color: var(--text-muted); font-weight: 500; font-size: 0.875rem; text-transform: uppercase; cursor: pointer; }
+        th:hover { color: var(--text-main); }
+        
+        /* DB Schema Viewer */
+        .schema-box { border: 2px solid var(--primary); border-radius: 8px; padding: 1rem; text-align: center; background: rgba(79, 70, 229, 0.1); margin: 0.5rem; }
+        .flow-arrow { text-align: center; color: var(--text-muted); font-size: 1.5rem; margin: 0.5rem 0; }
+        
+        /* Utility */
+        .text-success { color: var(--success); }
+        .text-danger { color: var(--danger); }
+        .text-warning { color: var(--warning); }
+        .text-muted { color: var(--text-muted); }
+        .text-primary { color: var(--primary); }
+        .d-flex { display: flex; }
+        .align-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .mb-1 { margin-bottom: 1rem; }
+        .mb-2 { margin-bottom: 2rem; }
+        
+        /* Mobile adjustments */
+        @media (max-width: 768px) {
+            .sidebar { position: absolute; left: -250px; z-index: 90; }
+            .sidebar.mobile-open { left: 0; }
+            .stat-banner { flex-direction: column; }
+            .grid-3, .grid-4, .grid-2 { grid-template-columns: 1fr; }
+            .patient-sidebar { width: 100%; right: -100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="nav-brand">
+            <i class="fa-solid fa-shield-heart"></i> SafeGuard
+        </div>
+        <div class="nav-actions">
+            <!-- Role Switcher -->
+            <select class="role-switcher" id="roleSwitcher" onchange="changeRole()">
+                <option value="caregiver">👤 Caregiver View</option>
+                <option value="elderly">👴 Patient View</option>
+                <option value="doctor">🩺 Doctor View</option>
+            </select>
+            
+            <span class="text-muted hide-mobile"><i class="fa-regular fa-clock"></i> <span id="clock"></span></span>
+            
+            <div class="bell-icon" onclick="switchTab('alerts')">
+                <i class="fa-solid fa-bell"></i>
+                <span class="badge" id="alertBadge">0</span>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 0.5rem; background: var(--bg); padding: 0.3rem 0.8rem; border-radius: 20px; border: 1px solid var(--border); cursor: pointer;">
+                <img src="https://ui-avatars.com/api/?name=User&background=4F46E5&color=fff&rounded=true&size=24" alt="Profile">
+                <span style="font-size: 0.875rem;" id="currentUserLabel">Caregiver</span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <div class="sidebar" id="sidebar">
+            <!-- Caregiver/Admin Links -->
+            <div class="nav-group caregiver-only doctor-only">
+                <div class="text-muted" style="font-size: 0.75rem; text-transform: uppercase; padding: 1rem 1.5rem 0.5rem;">Monitoring</div>
+                <div class="nav-item active" onclick="switchTab('dashboard')" data-tab="dashboard">
+                    <i class="fa-solid fa-users"></i> Dashboard
+                </div>
+                <div class="nav-item" onclick="switchTab('alerts')" data-tab="alerts">
+                    <i class="fa-solid fa-triangle-exclamation"></i> Alert Center
+                </div>
+                <div class="nav-item" onclick="switchTab('analytics')" data-tab="analytics">
+                    <i class="fa-solid fa-chart-pie"></i> Analytics & Trends
+                </div>
+                <div class="nav-item" onclick="switchTab('ai-insights')" data-tab="ai-insights">
+                    <i class="fa-solid fa-brain"></i> AI Predictions
+                </div>
+                <div class="nav-item" onclick="switchTab('live-location')" data-tab="live-location">
+                    <i class="fa-solid fa-map-location-dot"></i> Live Location
+                </div>
+                <div class="nav-item" onclick="switchTab('facilities')" data-tab="facilities">
+                    <i class="fa-solid fa-building-user"></i> Facilities
+                </div>
+                <div class="nav-item" onclick="switchTab('admin')" data-tab="admin">
+                    <i class="fa-solid fa-shield-halved"></i> Org Settings
+                </div>
+                <div class="nav-item" onclick="switchTab('community')" data-tab="community">
+                    <i class="fa-solid fa-users-rays"></i> Community
+                </div>
+            </div>
+            
+            <div class="nav-group doctor-only" style="display:none;">
+                <div class="text-muted" style="font-size: 0.75rem; text-transform: uppercase; padding: 1rem 1.5rem 0.5rem;">Clinical</div>
+                <div class="nav-item" onclick="switchTab('clinical')" data-tab="clinical">
+                    <i class="fa-solid fa-stethoscope"></i> Clinical Overview
+                </div>
+                <div class="nav-item" onclick="switchTab('telehealth')" data-tab="telehealth">
+                    <i class="fa-solid fa-video"></i> Telemedicine
+                </div>
+                <div class="nav-item" onclick="switchTab('records')" data-tab="records">
+                    <i class="fa-solid fa-file-medical"></i> Health Records
+                </div>
+            </div>
+
+            <!-- Patient Links -->
+            <div class="nav-group elderly-only" style="display:none;">
+                <div class="text-muted" style="font-size: 0.75rem; text-transform: uppercase; padding: 1rem 1.5rem 0.5rem;">My App</div>
+                <div class="nav-item" onclick="switchTab('elderly-app')" data-tab="elderly-app">
+                    <i class="fa-solid fa-mobile-screen"></i> My Dashboard
+                </div>
+                <div class="nav-item" onclick="switchTab('telehealth')" data-tab="telehealth">
+                    <i class="fa-solid fa-user-doctor"></i> Consult Doctor
+                </div>
+                <div class="nav-item" onclick="switchTab('prescriptions')" data-tab="prescriptions">
+                    <i class="fa-solid fa-pills"></i> Medications
+                </div>
+                <div class="nav-item" onclick="switchTab('wearables')" data-tab="wearables">
+                    <i class="fa-solid fa-watch-fitness"></i> Connected Devices
+                </div>
+                <div class="nav-item" onclick="switchTab('my-profile')" data-tab="my-profile">
+                    <i class="fa-solid fa-address-card"></i> My Profile
+                </div>
+            </div>
+
+            <div class="nav-group caregiver-only doctor-only">
+                <div class="text-muted" style="font-size: 0.75rem; text-transform: uppercase; padding: 1rem 1.5rem 0.5rem;">System</div>
+                <div class="nav-item" onclick="switchTab('dbviz')" data-tab="dbviz">
+                    <i class="fa-solid fa-database"></i> DB Diagnostics
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="main-content">
+            <!-- Breadcrumbs -->
+            <div class="text-muted mb-1" style="font-size: 0.875rem;" id="breadcrumb">
+                SafeGuard > Dashboard
+            </div>
+
+            <!-- 1. CAREGIVER DASHBOARD -->
+            <div id="dashboard" class="tab-content active">
+                <div class="d-flex justify-between align-center mb-1">
+                    <h2>Overview</h2>
+                    <span class="text-success" style="font-size: 0.875rem; display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="display: inline-block; width: 8px; height: 8px; background: var(--success); border-radius: 50%; animation: pulse 2s infinite;"></span>
+                        System Health: 98% ✓ | Last Sync: Just now ↻
+                    </span>
+                </div>
+                
+                <div class="stat-banner" id="dashStats">
+                    <!-- Populated by JS -->
+                </div>
+
+                <div class="filter-bar">
+                    <button class="chip active">All</button>
+                    <button class="chip">Alerts Only</button>
+                    <button class="chip">At Risk</button>
+                    <button class="chip">Low Adherence</button>
+                    <select class="search-bar" style="width: auto; margin-left: auto; cursor: pointer;">
+                        <option>Sort: Last Check-in</option>
+                        <option>Sort: Risk Score</option>
+                        <option>Sort: Adherence</option>
+                    </select>
+                    <input type="text" class="search-bar" style="margin-left: 0.5rem;" placeholder="Search by name...">
+                </div>
+
+                <div class="grid-3" id="elderlyCardsGrid">
+                    <!-- Cards populated by JS -->
+                </div>
+            </div>
+
+            <!-- Patient Detail Slide-in Sidebar -->
+            <div class="patient-sidebar" id="patientSidebar">
+                <i class="fa-solid fa-times close-sidebar" onclick="closeSidebar()"></i>
+                <div id="patientDetailsContent">
+                    <!-- Populated dynamically when clicking a card -->
+                </div>
+            </div>
+
+            <!-- 2. ANALYTICS & TRENDS -->
+            <div id="analytics" class="tab-content">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h2><i class="fa-solid fa-chart-pie"></i> Analytics & Trends</h2>
+                    <button class="btn btn-outline btn-sm"><i class="fa-solid fa-download"></i> Export CSV</button>
+                </div>
+                
+                <div class="grid-2 mb-2">
+                    <div class="card">
+                        <h3>7-Day Check-in Compliance</h3>
+                        <canvas id="complianceChart" height="200"></canvas>
+                    </div>
+                    <div class="card">
+                        <h3>Risk Score Trends</h3>
+                        <canvas id="riskChart" height="200"></canvas>
+                    </div>
+                </div>
+                
+                <div class="grid-2 mb-2">
+                    <div class="card">
+                        <h3>Overall Medication Adherence Distribution</h3>
+                        <canvas id="adherenceDoughnut" height="200"></canvas>
+                    </div>
+                    <div class="card">
+                        <h3>Alert Summary Heatmap (Last 7 Days)</h3>
+                        <canvas id="alertHeatmap" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. ALERT MANAGEMENT CENTER -->
+            <div id="alerts" class="tab-content">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h2><i class="fa-solid fa-triangle-exclamation"></i> Alert Management Center</h2>
+                    <button class="btn btn-outline"><i class="fa-solid fa-check-double"></i> Acknowledge All</button>
+                </div>
+                
+                <div class="filter-bar">
+                    <button class="chip active">Pending</button>
+                    <button class="chip">Acknowledged</button>
+                    <button class="chip">Resolved</button>
+                </div>
+                
+                <div class="card" style="padding: 0;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Severity</th>
+                                <th>Type</th>
+                                <th>Patient</th>
+                                <th>Created</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alertsTableBody">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 4. DOCTOR / CLINICAL VIEW -->
+            <div id="clinical" class="tab-content">
+                <h2 class="mb-2"><i class="fa-solid fa-stethoscope"></i> Clinical Dashboard</h2>
+                <div class="filter-bar">
+                    <button class="chip active">My Assigned Patients</button>
+                    <button class="chip">High Risk</button>
+                    <button class="chip">Requires Review</button>
+                </div>
+                <div class="card" style="padding: 0;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Patient Name</th>
+                                <th>Age</th>
+                                <th>Key Conditions</th>
+                                <th>Med Adherence</th>
+                                <th>Risk Score</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clinicalTableBody">
+                            <!-- Mock Data Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 5. ELDERLY/PATIENT APP SIMULATION -->
+            <div id="elderly-app" class="tab-content">
+                <div style="max-width: 600px; margin: 0 auto; text-align: center; background: var(--surface); padding: 2rem; border-radius: 1rem; border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+                    <h2 style="font-size: 2.5rem; margin-bottom: 0.5rem;" id="greetingText">Good Morning, Patient!</h2>
+                    <p class="text-success" style="font-size: 1.2rem; font-weight: 500;"><i class="fa-solid fa-fire"></i> 27 Day Safe Streak! 🎉</p>
+                    <p class="text-muted" style="margin-bottom: 2rem;">Keep it up! One more day for 28!</p>
+                    
+                    <button id="sosBtn" class="btn btn-danger elderly-huge-btn" style="box-shadow: 0 0 30px rgba(239, 68, 68, 0.4); margin-bottom: 1rem; width: 100%; max-width: 300px; height: 100px; border-radius: 1rem;" onmousedown="startSOS()" onmouseup="cancelSOS()" onmouseleave="cancelSOS()" ontouchstart="startSOS()" ontouchend="cancelSOS()">
+                        🆘 HOLD FOR SOS
+                        <div id="sosProgress" style="width: 0%; height: 5px; background: white; margin-top: 10px; transition: width 0.1s linear;"></div>
+                    </button>
+                    
+                    <button class="btn btn-success elderly-huge-btn" style="margin-top: 1rem;" onclick="simulateElderlyCheckin()">
+                        I'M SAFE
+                    </button>
+                    
+                    <p class="text-muted mb-2" id="elderlyLocationText"><i class="fa-solid fa-location-dot"></i> Last check-in: Today at 09:15 AM</p>
+                    
+                    <h3 class="mb-1" style="text-align: left;">Quick Health Logs</h3>
+                    <div class="quick-action-grid mb-2">
+                        <div class="action-btn" onclick="logHealth('Medication Taken')">
+                            <i class="fa-solid fa-pills text-success"></i> Med Taken
+                        </div>
+                        <div class="action-btn" onclick="logHealth('Felt Dizzy')">
+                            <i class="fa-solid fa-head-side-virus text-warning"></i> Felt Dizzy
+                        </div>
+                        <div class="action-btn" onclick="logHealth('Fall')">
+                            <i class="fa-solid fa-person-falling text-danger"></i> Fall!
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: left; border-top: 1px solid var(--border); padding-top: 1.5rem;">
+                        <h3 class="mb-1">Your Medications Today</h3>
+                        <div class="d-flex justify-between align-center mb-1 text-success">
+                            <span><i class="fa-solid fa-check"></i> 08:00 - Aspirin 500mg</span> <span>Taken</span>
+                        </div>
+                        <div class="d-flex justify-between align-center mb-1 text-success">
+                            <span><i class="fa-solid fa-check"></i> 13:00 - Metformin 1000mg</span> <span>Taken</span>
+                        </div>
+                        <div class="d-flex justify-between align-center mb-1 text-warning">
+                            <span><i class="fa-regular fa-clock"></i> 20:00 - Atenolol 50mg</span> <span>Due in 4h</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 7. TELEHEALTH -->
+            <div id="telehealth" class="tab-content">
+                <h2 class="mb-2"><i class="fa-solid fa-video"></i> Telemedicine & Video Consultation</h2>
+                <div class="grid-2">
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Available Doctors (Next 30 mins)</h3>
+                        <div style="border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 1rem;">
+                            <div class="d-flex justify-between align-center">
+                                <div>
+                                    <h4 style="margin: 0;">Dr. Patel - General Practice</h4>
+                                    <p class="text-muted" style="font-size: 0.85rem;"><span class="text-success">● Online now</span> (Next slot: In 5 mins)</p>
+                                    <p style="color: #F59E0B; font-size: 0.8rem;">⭐⭐⭐⭐⭐ (128 reviews) | ₹500/consultation</p>
+                                </div>
+                                <img src="https://ui-avatars.com/api/?name=Dr+Patel&background=10B981&color=fff&rounded=true" width="50" height="50">
+                            </div>
+                            <div class="d-flex gap-1 mt-2" style="gap: 0.5rem; margin-top: 0.5rem;">
+                                <button class="btn btn-sm btn-success w-100" onclick="alert('Video call started (Simulated)')"><i class="fa-solid fa-video"></i> Book Call</button>
+                                <button class="btn btn-sm btn-outline"><i class="fa-solid fa-message"></i> Message</button>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="d-flex justify-between align-center">
+                                <div>
+                                    <h4 style="margin: 0;">Dr. Sharma - Cardiologist</h4>
+                                    <p class="text-muted" style="font-size: 0.85rem;">Online in 2 hours (Next slot: 6:00 PM)</p>
+                                    <p style="color: #F59E0B; font-size: 0.8rem;">⭐⭐⭐⭐ (89 reviews) | ₹1500/consultation</p>
+                                </div>
+                                <img src="https://ui-avatars.com/api/?name=Dr+Sharma&background=3B82F6&color=fff&rounded=true" width="50" height="50">
+                            </div>
+                            <div class="d-flex gap-1 mt-2" style="gap: 0.5rem; margin-top: 0.5rem;">
+                                <button class="btn btn-sm btn-primary w-100"><i class="fa-solid fa-calendar"></i> Book Later</button>
+                                <button class="btn btn-sm btn-outline"><i class="fa-solid fa-message"></i> Message</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">My Upcoming Consultations</h3>
+                        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                            <div class="d-flex justify-between align-center mb-1">
+                                <strong><i class="fa-regular fa-clock text-warning"></i> Oct 8 3:00 PM - Dr. Sharma</strong>
+                                <span class="chip">Upcoming</span>
+                            </div>
+                            <p class="text-muted" style="font-size: 0.85rem;">Cardiology follow-up</p>
+                            <div class="mt-2" style="margin-top: 0.5rem; display: flex; gap: 0.5rem;">
+                                <button class="btn btn-sm btn-outline">Reschedule</button>
+                                <button class="btn btn-sm btn-outline">Add Reminder</button>
+                            </div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem;">
+                            <div class="d-flex justify-between align-center mb-1">
+                                <strong><i class="fa-solid fa-check text-success"></i> Oct 6 10:00 AM - Dr. Patel</strong>
+                                <span class="text-success" style="font-size: 0.85rem;">Completed</span>
+                            </div>
+                            <p class="text-muted" style="font-size: 0.85rem;">Notes: Continue current meds, mild headache.</p>
+                            <p class="text-success" style="font-size: 0.85rem;"><i class="fa-solid fa-file-prescription"></i> Prescription shared</p>
+                            <div class="mt-2" style="margin-top: 0.5rem; display: flex; gap: 0.5rem;">
+                                <button class="btn btn-sm btn-outline">View Notes</button>
+                                <button class="btn btn-sm btn-outline">Recording</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 8. PRESCRIPTIONS -->
+            <div id="prescriptions" class="tab-content">
+                <h2 class="mb-2"><i class="fa-solid fa-pills"></i> Medication & Prescriptions</h2>
+                <div class="grid-2">
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Active Prescriptions</h3>
+                        <div style="border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 4px solid var(--success);">
+                            <h4 style="margin: 0;">1. Metformin 1000mg</h4>
+                            <p class="text-muted" style="font-size: 0.85rem;">Prescribed by: Dr. Patel (Oct 1, 2024)</p>
+                            <p class="text-muted" style="font-size: 0.85rem;">Dosage: Once daily (morning)</p>
+                            <p class="text-success" style="font-size: 0.85rem;">Refills: 2 remaining | Pharmacy: Apollo (2km)</p>
+                            <div class="d-flex gap-1" style="margin-top: 0.5rem; gap: 0.5rem;">
+                                <button class="btn btn-sm btn-success">Refill Now</button>
+                                <button class="btn btn-sm btn-outline">Set Alert</button>
+                            </div>
+                        </div>
+                        <div style="border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 4px solid var(--warning);">
+                            <h4 style="margin: 0;">2. Atenolol 50mg</h4>
+                            <p class="text-muted" style="font-size: 0.85rem;">Prescribed by: Dr. Sharma (Sep 15)</p>
+                            <p class="text-muted" style="font-size: 0.85rem;">Dosage: Once daily (evening)</p>
+                            <p class="text-warning" style="font-size: 0.85rem;">⚠️ Refills: 0 remaining (Expiring Oct 15)</p>
+                            <div class="d-flex gap-1" style="margin-top: 0.5rem; gap: 0.5rem;">
+                                <button class="btn btn-sm btn-warning">Request Doctor Refill</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Allergies & Interactions</h3>
+                        <div style="background: rgba(239,68,68,0.1); border: 1px solid var(--danger); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                            <p class="text-danger" style="margin-bottom: 0.5rem;"><strong>⚠️ Allergic to:</strong> Penicillin</p>
+                            <p class="text-danger"><strong>⚠️ Avoid with:</strong> Alcohol (Atenolol)</p>
+                        </div>
+                        <h3 class="mb-1 mt-2 text-primary" style="margin-top: 1.5rem;">History</h3>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.5rem;">Oct 1: Prescription added (Metformin)</p>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.5rem;">Sep 30: Pharmacy delivery completed</p>
+                        <p class="text-muted" style="font-size: 0.85rem;">Sep 28: Prescription refilled (Atenolol)</p>
+                        <button class="btn btn-outline w-100" style="margin-top: 1rem; width: 100%; justify-content: center;">Download Full List</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 9. WEARABLES -->
+            <div id="wearables" class="tab-content">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h2><i class="fa-solid fa-watch-fitness"></i> Connected Devices</h2>
+                    <button class="btn btn-primary"><i class="fa-solid fa-plus"></i> Add Device</button>
+                </div>
+                <div class="grid-3">
+                    <div class="card" style="border-left: 4px solid var(--success);">
+                        <div class="d-flex justify-between align-center mb-1">
+                            <h3 style="margin: 0;"><i class="fa-brands fa-apple"></i> Apple Watch</h3>
+                            <span class="text-success" style="font-size: 0.85rem;">✓ Connected (87%)</span>
+                        </div>
+                        <ul style="list-style: none; padding: 0; margin-bottom: 1rem; font-size: 0.9rem;">
+                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span class="text-muted">Heart Rate</span> <span>78 bpm (normal)</span></li>
+                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span class="text-muted">Blood O2</span> <span>98%</span></li>
+                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span class="text-muted">Sleep</span> <span>7h 22m</span></li>
+                            <li style="display: flex; justify-content: space-between;"><span class="text-muted">Steps Today</span> <span>8,234</span></li>
+                        </ul>
+                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">Manage Settings</button>
+                    </div>
+                    <div class="card" style="border-left: 4px solid var(--success);">
+                        <div class="d-flex justify-between align-center mb-1">
+                            <h3 style="margin: 0;"><i class="fa-solid fa-heart-pulse"></i> BP Monitor</h3>
+                            <span class="text-success" style="font-size: 0.85rem;">✓ Connected (Last 1h)</span>
+                        </div>
+                        <ul style="list-style: none; padding: 0; margin-bottom: 1rem; font-size: 0.9rem;">
+                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span class="text-muted">Systolic</span> <span>128 mmHg</span></li>
+                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span class="text-muted">Diastolic</span> <span>82 mmHg</span></li>
+                            <li style="display: flex; justify-content: space-between;"><span class="text-muted">Pulse</span> <span>76 bpm</span></li>
+                        </ul>
+                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">View Trends</button>
+                    </div>
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Daily Activity Ring</h3>
+                        <div style="text-align: center; padding: 1rem 0;">
+                            <div style="position: relative; width: 120px; height: 120px; margin: 0 auto; border-radius: 50%; border: 10px solid var(--border); border-top-color: var(--success); transform: rotate(-45deg);">
+                                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(45deg); font-size: 1.5rem; font-weight: bold; color: var(--success);">100%</div>
+                            </div>
+                            <p class="text-muted" style="margin-top: 1rem;">All activity goals met!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 10. HEALTH RECORDS -->
+            <div id="records" class="tab-content">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h2><i class="fa-solid fa-file-medical"></i> Health Records & Labs</h2>
+                    <button class="btn btn-primary"><i class="fa-solid fa-upload"></i> Upload Record</button>
+                </div>
+                <div class="grid-2">
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Recent Lab Reports</h3>
+                        <div style="border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 1rem;">
+                            <div class="d-flex justify-between mb-1">
+                                <h4 style="margin: 0;">Blood Test (Oct 1, 2024)</h4>
+                                <span class="chip" style="background: var(--success); color: white; border:none; padding: 2px 8px; font-size: 0.75rem;">Results Ready</span>
+                            </div>
+                            <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.5rem;">Metropolis Healthcare</p>
+                            <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Glucose:</span> <span class="text-warning">118 mg/dL (High)</span></div>
+                            <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>HbA1c:</span> <span class="text-warning">6.8% (Prediabetic)</span></div>
+                            <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>LDL:</span> <span class="text-success">135 mg/dL</span></div>
+                            <div class="d-flex gap-1 mt-2" style="margin-top: 0.75rem; gap: 0.5rem;">
+                                <button class="btn btn-sm btn-outline"><i class="fa-solid fa-file-pdf"></i> View PDF</button>
+                                <button class="btn btn-sm btn-outline"><i class="fa-solid fa-share-nodes"></i> Share</button>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="d-flex justify-between mb-1">
+                                <h4 style="margin: 0;">Lipid Panel (Sep 15, 2024)</h4>
+                                <span class="chip" style="background: var(--success); color: white; border:none; padding: 2px 8px; font-size: 0.75rem;">Results Ready</span>
+                            </div>
+                            <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.5rem;">Max Lab</p>
+                            <button class="btn btn-sm btn-outline"><i class="fa-solid fa-file-pdf"></i> View PDF</button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Documents & Trends</h3>
+                        <div style="background: var(--bg); padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border); margin-bottom: 1.5rem;">
+                            <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem;">Glucose Levels Trend (12m)</h4>
+                            <div class="d-flex justify-between text-muted" style="font-size: 0.85rem;"><span>Oct 1:</span> <span>118 mg/dL</span></div>
+                            <div class="d-flex justify-between text-muted" style="font-size: 0.85rem;"><span>Jul 15:</span> <span>115 mg/dL</span></div>
+                            <div class="d-flex justify-between text-muted" style="font-size: 0.85rem;"><span>Apr 22:</span> <span>112 mg/dL</span></div>
+                            <div class="d-flex justify-between text-muted" style="font-size: 0.85rem;"><span>Jan 10:</span> <span>110 mg/dL</span></div>
+                            <p class="text-warning mt-1" style="font-size: 0.85rem; margin-top: 0.5rem;"><i class="fa-solid fa-arrow-trend-up"></i> Trend: Slightly increasing. Monitor diet.</p>
+                        </div>
+                        <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem;">Static Documents</h4>
+                        <ul style="list-style: none; padding: 0; margin-bottom: 1rem; font-size: 0.9rem;">
+                            <li style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"><i class="fa-solid fa-file-pdf text-danger"></i> Allergy Card</li>
+                            <li style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"><i class="fa-solid fa-file-pdf text-danger"></i> Vaccination Cert</li>
+                            <li style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"><i class="fa-solid fa-image text-primary"></i> X-Ray Results (Oct)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 11. LIVE LOCATION -->
+            <div id="live-location" class="tab-content">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h2><i class="fa-solid fa-map-location-dot"></i> Live Location Tracking</h2>
+                    <button class="btn btn-outline"><i class="fa-solid fa-gear"></i> Geofence Settings</button>
+                </div>
+                <div class="grid-2">
+                    <div class="card" style="padding: 0; overflow: hidden; min-height: 400px; background: #2a3a4c; display: flex; align-items: center; justify-content: center; position: relative;">
+                        <!-- Mock Map -->
+                        <div style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.5); padding: 0.5rem; border-radius: 0.25rem; font-size: 0.8rem;">
+                            <i class="fa-solid fa-satellite-dish text-success"></i> GPS Active
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="width: 200px; height: 200px; border-radius: 50%; border: 2px dashed var(--success); background: rgba(16,185,129,0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto; position: relative;">
+                                <i class="fa-solid fa-house" style="position: absolute; top: 20px; color: var(--success); font-size: 1.5rem;"></i>
+                                <div style="width: 15px; height: 15px; background: var(--primary); border-radius: 50%; border: 2px solid white; box-shadow: 0 0 10px var(--primary); position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);"></div>
+                            </div>
+                            <p class="mt-2" style="margin-top: 1rem; font-weight: bold;">📍 Safe Zone: Home</p>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Location History & Geofencing</h3>
+                        <div style="background: var(--bg); padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border); margin-bottom: 1rem;">
+                            <h4 style="margin: 0 0 0.5rem 0;">Current Status</h4>
+                            <p class="text-success" style="margin: 0; font-size: 1.1rem;"><i class="fa-solid fa-check-circle"></i> At Home</p>
+                            <p class="text-muted" style="font-size: 0.85rem; margin-top: 0.25rem;">Last updated: Just now | Accuracy: 20m</p>
+                        </div>
+                        <h4 style="margin: 1.5rem 0 0.5rem 0; font-size: 0.9rem;">Events (Last 24h)</h4>
+                        <div style="border-left: 2px solid var(--border); margin-left: 0.5rem; padding-left: 1rem;">
+                            <div style="position: relative; margin-bottom: 1rem;">
+                                <div style="position: absolute; left: -1.4rem; top: 0.25rem; width: 10px; height: 10px; background: var(--success); border-radius: 50%;"></div>
+                                <p style="margin: 0; font-size: 0.9rem;">11:00 AM - Returned home</p>
+                            </div>
+                            <div style="position: relative; margin-bottom: 1rem;">
+                                <div style="position: absolute; left: -1.4rem; top: 0.25rem; width: 10px; height: 10px; background: var(--text-muted); border-radius: 50%;"></div>
+                                <p style="margin: 0; font-size: 0.9rem;">10:45 AM - Exited pharmacy</p>
+                            </div>
+                            <div style="position: relative; margin-bottom: 1rem;">
+                                <div style="position: absolute; left: -1.4rem; top: 0.25rem; width: 10px; height: 10px; background: var(--primary); border-radius: 50%;"></div>
+                                <p style="margin: 0; font-size: 0.9rem;">10:15 AM - Entered pharmacy</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 12. FACILITIES (ENTERPRISE) -->
+            <div id="facilities" class="tab-content">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h2><i class="fa-solid fa-building-user"></i> Network Facilities</h2>
+                    <button class="btn btn-primary"><i class="fa-solid fa-plus"></i> Add Facility</button>
+                </div>
+                <div class="grid-3">
+                    <div class="card" style="border-top: 4px solid var(--primary);">
+                        <h3 class="mb-1">Apollo Care - Delhi</h3>
+                        <p class="text-success" style="font-size: 0.85rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-circle-check"></i> Active (85 elderly)</p>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Manager: Priya Kumar</p>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Staff:</span> <span>15 (3 Docs, 8 Nurses)</span></div>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Alerts Today:</span> <span class="text-danger">3 pending</span></div>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;"><span>Avg Response:</span> <span>12 mins</span></div>
+                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">Manage Facility</button>
+                    </div>
+                    <div class="card" style="border-top: 4px solid var(--primary);">
+                        <h3 class="mb-1">Apollo Care - Mumbai</h3>
+                        <p class="text-success" style="font-size: 0.85rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-circle-check"></i> Active (65 elderly)</p>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Manager: Raj Singh</p>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Staff:</span> <span>12 (2 Docs, 6 Nurses)</span></div>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Alerts Today:</span> <span class="text-warning">1 pending</span></div>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;"><span>Avg Response:</span> <span>9 mins</span></div>
+                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">Manage Facility</button>
+                    </div>
+                    <div class="card" style="border-top: 4px solid var(--primary);">
+                        <h3 class="mb-1">Apollo Care - Bangalore</h3>
+                        <p class="text-success" style="font-size: 0.85rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-circle-check"></i> Active (30 elderly)</p>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Manager: Anita Desai</p>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Staff:</span> <span>8 (1 Doc, 4 Nurses)</span></div>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Alerts Today:</span> <span class="text-success">0 pending</span></div>
+                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;"><span>Avg Response:</span> <span>8 mins</span></div>
+                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">Manage Facility</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 13. AI PREDICTIONS -->
+            <div id="ai-insights" class="tab-content">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h2><i class="fa-solid fa-brain text-primary"></i> AI Predictive Analytics</h2>
+                    <button class="btn btn-outline"><i class="fa-solid fa-arrows-rotate"></i> Refresh Models</button>
+                </div>
+                <div class="grid-2 mb-2">
+                    <div class="card" style="border-top: 4px solid var(--danger);">
+                        <h3 class="mb-1">Fall Risk Prediction (72h Forecast)</h3>
+                        <p class="text-danger" style="font-size: 2rem; font-weight: bold; margin: 0;">72% <span style="font-size: 1rem; font-weight: normal;" class="text-muted">High Risk: Alice</span></p>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Based on: Heart rate irregular, activity down 40%, new medication</p>
+                        <div style="background: rgba(239,68,68,0.1); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                            <h4 class="text-danger" style="margin: 0 0 0.5rem 0;">Recommendation</h4>
+                            <p style="margin: 0; font-size: 0.9rem;">Physical therapy evaluation needed. Monitor closely.</p>
+                        </div>
+                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">View Detailed Analysis</button>
+                    </div>
+                    <div class="card" style="border-top: 4px solid var(--warning);">
+                        <h3 class="mb-1">Medication Adherence Forecast</h3>
+                        <p class="text-warning" style="font-size: 2rem; font-weight: bold; margin: 0;">68% <span style="font-size: 1rem; font-weight: normal;" class="text-muted">Predicted: Bob</span></p>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Based on: Weekend pattern (often forgets Sundays)</p>
+                        <div style="background: rgba(245,158,11,0.1); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                            <h4 class="text-warning" style="margin: 0 0 0.5rem 0;">Recommendation</h4>
+                            <p style="margin: 0; font-size: 0.9rem;">Sister to call Sundays 10 AM. Adjust reminder times.</p>
+                        </div>
+                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">Adjust Reminders</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3 class="mb-1 text-primary">Health Event Anomaly Detection</h3>
+                    <table style="width: 100%;">
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 1rem 0;"><span class="text-danger"><i class="fa-solid fa-heart-crack"></i> Cardiac Anomaly</span></td>
+                            <td class="text-muted">Carol's HR spiked to 112 bpm (normally 72)</td>
+                            <td><button class="btn btn-sm btn-danger">Alert Doctor</button></td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 1rem 0;"><span class="text-warning"><i class="fa-solid fa-bed"></i> Sleep Pattern Anomaly</span></td>
+                            <td class="text-muted">Diana's sleep dropped 50% over 3 days</td>
+                            <td><button class="btn btn-sm btn-outline">Check-in</button></td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 14. ADMIN / ORG SETTINGS -->
+            <div id="admin" class="tab-content">
+                <h2 class="mb-2"><i class="fa-solid fa-shield-halved"></i> Organization Settings</h2>
+                <div class="grid-2">
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Brand Customization (White-Label)</h3>
+                        <div style="margin-bottom: 1rem;">
+                            <label class="text-muted" style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Organization Name</label>
+                            <input type="text" value="Apollo Senior Care" style="width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text-main); padding: 0.5rem; border-radius: 0.25rem;">
+                        </div>
+                        <div class="d-flex gap-1 mb-1">
+                            <div style="flex:1;">
+                                <label class="text-muted" style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Primary Color</label>
+                                <input type="color" value="#4F46E5" style="width: 100%; height: 40px; border: none; background: transparent; cursor: pointer;">
+                            </div>
+                            <div style="flex:1;">
+                                <label class="text-muted" style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Secondary Color</label>
+                                <input type="color" value="#10B981" style="width: 100%; height: 40px; border: none; background: transparent; cursor: pointer;">
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 1rem;">
+                            <label class="text-muted" style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Custom Portal URL</label>
+                            <input type="text" value="apollo.safeguard.health" style="width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text-main); padding: 0.5rem; border-radius: 0.25rem;">
+                        </div>
+                        <button class="btn btn-primary w-100" style="width: 100%; justify-content: center;">Save Brand Settings</button>
+                    </div>
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Staff & Subscription (Premium Tier)</h3>
+                        <div class="d-flex justify-between text-muted" style="margin-bottom: 0.5rem;"><span>Total Users:</span> <span>45 / 100</span></div>
+                        <div class="d-flex justify-between text-muted" style="margin-bottom: 0.5rem;"><span>HIPAA Compliance:</span> <span class="text-success">✓ Enabled</span></div>
+                        <div class="d-flex justify-between text-muted" style="margin-bottom: 1.5rem;"><span>Billing Cycle:</span> <span>Nov 1, 2024</span></div>
+                        
+                        <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem;">Feature Access</h4>
+                        <ul style="list-style: none; padding: 0; margin-bottom: 1rem; font-size: 0.9rem;">
+                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span>Telehealth</span> <span class="text-success">Enabled</span></li>
+                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span>Wearable Integration</span> <span class="text-success">Enabled</span></li>
+                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span>API Access</span> <span class="text-danger">Not in plan</span></li>
+                        </ul>
+                        <button class="btn btn-outline w-100" style="width: 100%; justify-content: center;">Upgrade Plan</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 15. COMMUNITY -->
+            <div id="community" class="tab-content">
+                <h2 class="mb-2"><i class="fa-solid fa-users-rays"></i> Caregiver Support Network</h2>
+                <div class="filter-bar">
+                    <button class="chip active">My Groups</button>
+                    <button class="chip">Discover</button>
+                    <button class="chip">Expert Q&A</button>
+                    <input type="text" class="search-bar" style="margin-left: auto;" placeholder="Search groups...">
+                </div>
+                <div class="grid-2">
+                    <div class="card">
+                        <div class="d-flex justify-between align-center mb-1">
+                            <h3 style="margin: 0; font-size: 1.2rem;">Daughters Caring for Elderly Parents</h3>
+                            <span class="text-primary" style="font-size: 0.85rem;"><i class="fa-solid fa-users"></i> 2,340 members</span>
+                        </div>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Admin: Dr. Sharma (Geriatric Specialist)</p>
+                        
+                        <div style="background: var(--bg); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border: 1px solid var(--border);">
+                            <div class="d-flex gap-1 align-center mb-1">
+                                <img src="https://ui-avatars.com/api/?name=Priya&background=E879F9&color=fff&rounded=true" width="30" height="30">
+                                <div>
+                                    <strong style="font-size: 0.9rem;">Priya</strong>
+                                    <span class="text-muted" style="font-size: 0.75rem;">• 2 hours ago</span>
+                                </div>
+                            </div>
+                            <p style="font-size: 0.9rem; margin-bottom: 0.5rem;">My mom fell yesterday. How do I prevent this from happening again?</p>
+                            <div class="d-flex gap-1 text-muted" style="font-size: 0.8rem;">
+                                <span><i class="fa-regular fa-heart"></i> 1.2k</span>
+                                <span><i class="fa-regular fa-comment"></i> 245 replies</span>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline w-100" style="width: 100%; justify-content: center;">Write Post</button>
+                    </div>
+                    <div class="card">
+                        <h3 class="mb-1 text-primary">Resources & Upcoming Events</h3>
+                        <div style="margin-bottom: 1.5rem;">
+                            <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem;">Pinned Articles</h4>
+                            <ul style="list-style: none; padding: 0; font-size: 0.9rem;">
+                                <li style="margin-bottom: 0.5rem; color: var(--primary); cursor: pointer;"><i class="fa-solid fa-book-open"></i> 10 Fall Prevention Strategies</li>
+                                <li style="margin-bottom: 0.5rem; color: var(--primary); cursor: pointer;"><i class="fa-solid fa-book-open"></i> Medication Management Tips</li>
+                                <li style="margin-bottom: 0.5rem; color: var(--primary); cursor: pointer;"><i class="fa-solid fa-book-open"></i> Dealing with Caregiver Burnout</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem;">Live Events</h4>
+                            <div style="background: rgba(16,185,129,0.1); padding: 0.75rem; border-radius: 0.5rem; border-left: 3px solid var(--success);">
+                                <strong>Oct 15, 7 PM - Live Q&A: Fall Prevention</strong>
+                                <div class="d-flex justify-between align-center mt-1" style="margin-top: 0.5rem;">
+                                    <span class="text-success" style="font-size: 0.8rem;">Starting in 3 days</span>
+                                    <button class="btn btn-sm btn-success">RSVP</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 6. DB VISUALIZER (DIAGNOSTICS & QUERY FLOW) -->
+            <div id="dbviz" class="tab-content">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h2><i class="fa-solid fa-database"></i> Database Diagnostics & Query Flow</h2>
+                </div>
+                
+                <div class="grid-2">
+                    <!-- Schema & Analytics Flow -->
+                    <div class="card">
+                        <h3>Schema Viewer (Interactive Flow)</h3>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Visualizing how tables link and execute a complex risk query.</p>
+                        
+                        <div style="background: var(--bg); padding: 1rem; border-radius: 0.5rem;">
+                            <div class="schema-box" id="node-users" style="border-color: #3B82F6;">USERS (55 rows)</div>
+                            <div class="flow-arrow">↓ (1:N)</div>
+                            <div class="schema-box" id="node-elderly" style="border-color: #10B981;">ELDERLY (50 rows)</div>
+                            
+                            <div class="d-flex justify-between">
+                                <div style="flex:1;">
+                                    <div class="flow-arrow">↙</div>
+                                    <div class="schema-box" id="node-checkin" style="border-color: #8B5CF6;">CHECK_IN (240 rows)</div>
+                                </div>
+                                <div style="flex:1;">
+                                    <div class="flow-arrow">↓</div>
+                                    <div class="schema-box" id="node-alert" style="border-color: #EF4444;">ALERT (Pending)</div>
+                                </div>
+                                <div style="flex:1;">
+                                    <div class="flow-arrow">↘</div>
+                                    <div class="schema-box" id="node-health" style="border-color: #F59E0B;">HEALTH_EVENT (45 rows)</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-2" style="margin-top: 1rem;">
+                            <button class="btn btn-outline w-100" style="width: 100%; justify-content: center;" onclick="simulateQueryFlow()">
+                                <i class="fa-solid fa-play"></i> Simulate Query Animation
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Query Analyzer -->
+                    <div class="card">
+                        <h3>Query Analyzer</h3>
+                        <p class="text-muted mb-1" style="font-size: 0.875rem;">Run raw SQL to see execution plans and performance metrics.</p>
+                        <textarea id="sqlQuery" style="width: 100%; height: 100px; background: var(--bg); border: 1px solid var(--border); color: var(--text-main); padding: 0.75rem; border-radius: 0.375rem; font-family: monospace; margin-bottom: 1rem;">SELECT e.name, a.alert_type FROM elderly e JOIN alert a ON e.elder_id = a.elder_id WHERE a.status='Pending';</textarea>
+                        
+                        <div class="d-flex justify-between align-center">
+                            <button class="btn" onclick="runQuery()">Execute Query</button>
+                            <span class="text-muted" style="font-size: 0.875rem;">Execution Time: <span id="execTime" class="text-success font-weight-bold">0ms</span></span>
+                        </div>
+                        
+                        <div id="queryResults" style="margin-top: 1rem; background: #000; padding: 1rem; border-radius: 0.5rem; font-family: monospace; font-size: 0.85rem; overflow-x: auto; max-height: 250px; color: #A5B4FC; white-space: pre-wrap;">
+// Results will appear here
+                        </div>
+                        
+                        <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Recent Query History</h4>
+                        <div id="queryHistoryBox" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Alert Detail Modal -->
+    <div class="modal-overlay" id="alertModal">
+        <div class="modal-content">
+            <div class="d-flex justify-between align-center mb-1">
+                <h2 id="modalAlertTitle" class="text-danger">Alert Details</h2>
+                <i class="fa-solid fa-times" style="cursor: pointer;" onclick="closeModal('alertModal')"></i>
+            </div>
+            <div id="modalAlertBody" style="margin-bottom: 1.5rem;">
+                <!-- Populated dynamically -->
+            </div>
+            <div class="d-flex gap-1" style="gap: 1rem;">
+                <button class="btn btn-success" id="modalAckBtn">Acknowledge</button>
+                <button class="btn btn-warning">Snooze 1h</button>
+                <button class="btn btn-outline" onclick="closeModal('alertModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Animations -->
+    <style>
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+        .highlight-node { background-color: rgba(79, 70, 229, 0.4) !important; transition: 0.3s; transform: scale(1.05); }
+    </style>
+
+    <script src="app.js?v=2"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then((registration) => {
+              console.log('ServiceWorker registration successful with scope: ', registration.scope);
+            }, (error) => {
+              console.log('ServiceWorker registration failed: ', error);
+            });
+        });
+      }
+    </script>
+</html>
