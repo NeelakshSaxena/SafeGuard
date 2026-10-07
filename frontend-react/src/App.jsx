@@ -1,9 +1,28 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { RoleProvider } from './context/RoleContext';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { RoleProvider, useRole } from './context/RoleContext';
 import MainLayout from './components/layout/MainLayout';
+import Dashboard from './pages/Dashboard';
+import Alerts from './pages/Alerts';
+import Analytics from './pages/Analytics';
+import LiveLocation from './pages/LiveLocation';
+import DBViz from './pages/DBViz';
+import Clinical from './pages/Clinical';
+import ElderlyApp from './pages/ElderlyApp';
+import Telehealth from './pages/Telehealth';
+import Records from './pages/Records';
+import Prescriptions from './pages/Prescriptions';
+import Wearables from './pages/Wearables';
 import Placeholder from './pages/Placeholder';
 import './index.css';
+
+const HomeRoute = () => {
+  const { role } = useRole();
+  if (role === 'caregiver') return <Dashboard />;
+  if (role === 'doctor') return <Clinical />;
+  if (role === 'elderly') return <ElderlyApp />;
+  return <Navigate to="/alerts" />;
+};
 
 function App() {
   return (
@@ -11,15 +30,15 @@ function App() {
       <Router>
         <Routes>
           <Route path="/" element={<MainLayout />}>
-            <Route index element={<Placeholder title="Dashboard Overview" />} />
-            <Route path="alerts" element={<Placeholder title="Alert Center" />} />
-            <Route path="analytics" element={<Placeholder title="Analytics & Trends" />} />
-            <Route path="location" element={<Placeholder title="Live Location" />} />
-            <Route path="dbviz" element={<Placeholder title="DB Diagnostics" />} />
-            <Route path="telehealth" element={<Placeholder title="Telemedicine" />} />
-            <Route path="records" element={<Placeholder title="Health Records" />} />
-            <Route path="prescriptions" element={<Placeholder title="Medications" />} />
-            <Route path="wearables" element={<Placeholder title="Connected Devices" />} />
+            <Route index element={<HomeRoute />} />
+            <Route path="alerts" element={<Alerts />} />
+            <Route path="analytics" element={<Analytics />} />
+            <Route path="location" element={<LiveLocation />} />
+            <Route path="dbviz" element={<DBViz />} />
+            <Route path="telehealth" element={<Telehealth />} />
+            <Route path="records" element={<Records />} />
+            <Route path="prescriptions" element={<Prescriptions />} />
+            <Route path="wearables" element={<Wearables />} />
             <Route path="*" element={<Placeholder title="Not Found" />} />
           </Route>
         </Routes>
