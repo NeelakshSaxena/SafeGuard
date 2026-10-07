@@ -138,9 +138,34 @@
             .grid-3, .grid-4, .grid-2 { grid-template-columns: 1fr; }
             .patient-sidebar { width: 100%; right: -100%; }
         }
+
+        /* Login Screen */
+        .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .login-card { background: var(--surface); padding: 3rem; border-radius: 1rem; border: 1px solid var(--border); box-shadow: 0 20px 40px rgba(0,0,0,0.4); width: 400px; max-width: 90%; text-align: center; }
+        .login-card input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text-main); padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; font-family: 'Outfit', sans-serif; font-size: 1rem; outline: none; }
+        .login-card input:focus { border-color: var(--primary); }
     </style>
 </head>
 <body>
+
+    <!-- Login Screen -->
+    <div class="login-overlay" id="loginScreen">
+        <div class="login-card">
+            <h2 style="color: var(--primary); margin-bottom: 0.5rem;"><i class="fa-solid fa-shield-heart"></i> SafeGuard</h2>
+            <p class="text-muted" style="margin-bottom: 2rem;">Sign in to access your dashboard</p>
+            <form onsubmit="handleLogin(event)">
+                <input type="text" id="loginId" placeholder="Enter ID (e.g. patient1, caregiver1)" required autocomplete="off">
+                <input type="password" id="loginPass" placeholder="Password (any)" required>
+                <button type="submit" class="btn btn-primary w-100" style="width: 100%; justify-content: center; padding: 0.75rem; font-size: 1.1rem;">Sign In</button>
+            </form>
+            <div style="margin-top: 1.5rem; font-size: 0.85rem; color: var(--text-muted); text-align: left; background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 0.5rem;">
+                <strong>Test IDs:</strong><br>
+                <span style="color:var(--success)">patient1</span> (Patient View)<br>
+                <span style="color:var(--primary)">caregiver1</span> (Caregiver View)<br>
+                <span style="color:var(--warning)">doctor1</span> (Clinical View)
+            </div>
+        </div>
+    </div>
 
     <!-- Navbar -->
     <nav class="navbar">
@@ -148,16 +173,11 @@
             <i class="fa-solid fa-shield-heart"></i> SafeGuard
         </div>
         <div class="nav-actions">
-            <!-- Role Switcher -->
-            <select class="role-switcher" id="roleSwitcher" onchange="changeRole()">
-                <option value="caregiver">👤 Caregiver View</option>
-                <option value="elderly">👴 Patient View</option>
-                <option value="doctor">🩺 Doctor View</option>
-            </select>
+            <button class="btn btn-outline btn-sm" onclick="handleLogout()"><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</button>
             
             <span class="text-muted hide-mobile"><i class="fa-regular fa-clock"></i> <span id="clock"></span></span>
             
-            <div class="bell-icon" onclick="switchTab('alerts')">
+            <div class="bell-icon" onclick="handleNotifications()">
                 <i class="fa-solid fa-bell"></i>
                 <span class="badge" id="alertBadge">0</span>
             </div>
@@ -227,7 +247,7 @@
                     <i class="fa-solid fa-pills"></i> Medications
                 </div>
                 <div class="nav-item" onclick="switchTab('wearables')" data-tab="wearables">
-                    <i class="fa-solid fa-watch-fitness"></i> Connected Devices
+                    <i class="fa-solid fa-stopwatch"></i> Connected Devices
                 </div>
                 <div class="nav-item" onclick="switchTab('my-profile')" data-tab="my-profile">
                     <i class="fa-solid fa-address-card"></i> My Profile
@@ -421,6 +441,8 @@
                             <span><i class="fa-regular fa-clock"></i> 20:00 - Atenolol 50mg</span> <span>Due in 4h</span>
                         </div>
                     </div>
+                    
+                    <div id="healthLogHistory" style="border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 1rem;"></div>
                 </div>
             </div>
 
@@ -429,7 +451,7 @@
                 <h2 class="mb-2"><i class="fa-solid fa-video"></i> Telemedicine & Video Consultation</h2>
                 <div class="grid-2">
                     <div class="card">
-                        <h3 class="mb-1 text-primary">Available Doctors (Next 30 mins)</h3>
+                        <h3 class="mb-1 text-primary">Available Doctors</h3>
                         <div style="border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 1rem;">
                             <div class="d-flex justify-between align-center">
                                 <div>
@@ -440,8 +462,8 @@
                                 <img src="https://ui-avatars.com/api/?name=Dr+Patel&background=10B981&color=fff&rounded=true" width="50" height="50">
                             </div>
                             <div class="d-flex gap-1 mt-2" style="gap: 0.5rem; margin-top: 0.5rem;">
-                                <button class="btn btn-sm btn-success w-100" onclick="alert('Video call started (Simulated)')"><i class="fa-solid fa-video"></i> Book Call</button>
-                                <button class="btn btn-sm btn-outline"><i class="fa-solid fa-message"></i> Message</button>
+                                <button class="btn btn-sm btn-success w-100" onclick="bookConsultation('Dr. Patel', 'General Practice')"><i class="fa-solid fa-video"></i> Book Call</button>
+                                <button class="btn btn-sm btn-outline" onclick="openMessageModal('Dr. Patel')"><i class="fa-solid fa-message"></i> Message</button>
                             </div>
                         </div>
                         <div>
@@ -454,35 +476,15 @@
                                 <img src="https://ui-avatars.com/api/?name=Dr+Sharma&background=3B82F6&color=fff&rounded=true" width="50" height="50">
                             </div>
                             <div class="d-flex gap-1 mt-2" style="gap: 0.5rem; margin-top: 0.5rem;">
-                                <button class="btn btn-sm btn-primary w-100"><i class="fa-solid fa-calendar"></i> Book Later</button>
-                                <button class="btn btn-sm btn-outline"><i class="fa-solid fa-message"></i> Message</button>
+                                <button class="btn btn-sm btn-primary w-100" onclick="bookConsultation('Dr. Sharma', 'Cardiologist')"><i class="fa-solid fa-calendar"></i> Book Later</button>
+                                <button class="btn btn-sm btn-outline" onclick="openMessageModal('Dr. Sharma')"><i class="fa-solid fa-message"></i> Message</button>
                             </div>
                         </div>
                     </div>
                     <div class="card">
-                        <h3 class="mb-1 text-primary">My Upcoming Consultations</h3>
-                        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
-                            <div class="d-flex justify-between align-center mb-1">
-                                <strong><i class="fa-regular fa-clock text-warning"></i> Oct 8 3:00 PM - Dr. Sharma</strong>
-                                <span class="chip">Upcoming</span>
-                            </div>
-                            <p class="text-muted" style="font-size: 0.85rem;">Cardiology follow-up</p>
-                            <div class="mt-2" style="margin-top: 0.5rem; display: flex; gap: 0.5rem;">
-                                <button class="btn btn-sm btn-outline">Reschedule</button>
-                                <button class="btn btn-sm btn-outline">Add Reminder</button>
-                            </div>
-                        </div>
-                        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem;">
-                            <div class="d-flex justify-between align-center mb-1">
-                                <strong><i class="fa-solid fa-check text-success"></i> Oct 6 10:00 AM - Dr. Patel</strong>
-                                <span class="text-success" style="font-size: 0.85rem;">Completed</span>
-                            </div>
-                            <p class="text-muted" style="font-size: 0.85rem;">Notes: Continue current meds, mild headache.</p>
-                            <p class="text-success" style="font-size: 0.85rem;"><i class="fa-solid fa-file-prescription"></i> Prescription shared</p>
-                            <div class="mt-2" style="margin-top: 0.5rem; display: flex; gap: 0.5rem;">
-                                <button class="btn btn-sm btn-outline">View Notes</button>
-                                <button class="btn btn-sm btn-outline">Recording</button>
-                            </div>
+                        <h3 class="mb-1 text-primary">My Consultations</h3>
+                        <div id="consultationsList">
+                            <p class="text-muted">Loading consultations...</p>
                         </div>
                     </div>
                 </div>
@@ -500,8 +502,8 @@
                             <p class="text-muted" style="font-size: 0.85rem;">Dosage: Once daily (morning)</p>
                             <p class="text-success" style="font-size: 0.85rem;">Refills: 2 remaining | Pharmacy: Apollo (2km)</p>
                             <div class="d-flex gap-1" style="margin-top: 0.5rem; gap: 0.5rem;">
-                                <button class="btn btn-sm btn-success">Refill Now</button>
-                                <button class="btn btn-sm btn-outline">Set Alert</button>
+                                <button class="btn btn-sm btn-success" onclick="requestRefill('Metformin 1000mg', 'Apollo Pharmacy')">Refill Now</button>
+                                <button class="btn btn-sm btn-outline" onclick="setMedAlert('Metformin 1000mg')">Set Alert</button>
                             </div>
                         </div>
                         <div style="border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 4px solid var(--warning);">
@@ -510,9 +512,10 @@
                             <p class="text-muted" style="font-size: 0.85rem;">Dosage: Once daily (evening)</p>
                             <p class="text-warning" style="font-size: 0.85rem;">⚠️ Refills: 0 remaining (Expiring Oct 15)</p>
                             <div class="d-flex gap-1" style="margin-top: 0.5rem; gap: 0.5rem;">
-                                <button class="btn btn-sm btn-warning">Request Doctor Refill</button>
+                                <button class="btn btn-sm btn-warning" onclick="requestRefill('Atenolol 50mg', 'Dr. Sharma (Doctor Refill)')">Request Doctor Refill</button>
                             </div>
                         </div>
+                        <div id="refillHistory" style="border-top: 1px solid var(--border); padding-top: 1rem;"></div>
                     </div>
                     <div class="card">
                         <h3 class="mb-1 text-primary">Allergies & Interactions</h3>
@@ -524,7 +527,7 @@
                         <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.5rem;">Oct 1: Prescription added (Metformin)</p>
                         <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.5rem;">Sep 30: Pharmacy delivery completed</p>
                         <p class="text-muted" style="font-size: 0.85rem;">Sep 28: Prescription refilled (Atenolol)</p>
-                        <button class="btn btn-outline w-100" style="margin-top: 1rem; width: 100%; justify-content: center;">Download Full List</button>
+                        <button class="btn btn-outline w-100" style="margin-top: 1rem; width: 100%; justify-content: center;" onclick="downloadPrescriptions()"><i class="fa-solid fa-download"></i> Download Full List</button>
                     </div>
                 </div>
             </div>
@@ -532,43 +535,34 @@
             <!-- 9. WEARABLES -->
             <div id="wearables" class="tab-content">
                 <div class="d-flex justify-between align-center mb-2">
-                    <h2><i class="fa-solid fa-watch-fitness"></i> Connected Devices</h2>
-                    <button class="btn btn-primary"><i class="fa-solid fa-plus"></i> Add Device</button>
+                    <h2><i class="fa-solid fa-stopwatch"></i> Connected Devices</h2>
+                    <button class="btn btn-primary" onclick="addDevice()"><i class="fa-solid fa-plus"></i> Add Device</button>
                 </div>
-                <div class="grid-3">
-                    <div class="card" style="border-left: 4px solid var(--success);">
-                        <div class="d-flex justify-between align-center mb-1">
-                            <h3 style="margin: 0;"><i class="fa-brands fa-apple"></i> Apple Watch</h3>
-                            <span class="text-success" style="font-size: 0.85rem;">✓ Connected (87%)</span>
-                        </div>
-                        <ul style="list-style: none; padding: 0; margin-bottom: 1rem; font-size: 0.9rem;">
-                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span class="text-muted">Heart Rate</span> <span>78 bpm (normal)</span></li>
-                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span class="text-muted">Blood O2</span> <span>98%</span></li>
-                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span class="text-muted">Sleep</span> <span>7h 22m</span></li>
-                            <li style="display: flex; justify-content: space-between;"><span class="text-muted">Steps Today</span> <span>8,234</span></li>
-                        </ul>
-                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">Manage Settings</button>
-                    </div>
-                    <div class="card" style="border-left: 4px solid var(--success);">
-                        <div class="d-flex justify-between align-center mb-1">
-                            <h3 style="margin: 0;"><i class="fa-solid fa-heart-pulse"></i> BP Monitor</h3>
-                            <span class="text-success" style="font-size: 0.85rem;">✓ Connected (Last 1h)</span>
-                        </div>
-                        <ul style="list-style: none; padding: 0; margin-bottom: 1rem; font-size: 0.9rem;">
-                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span class="text-muted">Systolic</span> <span>128 mmHg</span></li>
-                            <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span class="text-muted">Diastolic</span> <span>82 mmHg</span></li>
-                            <li style="display: flex; justify-content: space-between;"><span class="text-muted">Pulse</span> <span>76 bpm</span></li>
-                        </ul>
-                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">View Trends</button>
+                <div class="grid-3" id="devicesGrid">
+                    <p class="text-muted">Loading devices...</p>
+                </div>
+            </div>
+
+            <!-- 15. MY PROFILE -->
+            <div id="my-profile" class="tab-content">
+                <h2 class="mb-2"><i class="fa-solid fa-address-card"></i> My Profile</h2>
+                <div class="grid-2">
+                    <div class="card" id="profileData">
+                        <p class="text-muted">Loading profile...</p>
                     </div>
                     <div class="card">
-                        <h3 class="mb-1 text-primary">Daily Activity Ring</h3>
-                        <div style="text-align: center; padding: 1rem 0;">
-                            <div style="position: relative; width: 120px; height: 120px; margin: 0 auto; border-radius: 50%; border: 10px solid var(--border); border-top-color: var(--success); transform: rotate(-45deg);">
-                                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(45deg); font-size: 1.5rem; font-weight: bold; color: var(--success);">100%</div>
-                            </div>
-                            <p class="text-muted" style="margin-top: 1rem;">All activity goals met!</p>
+                        <h3 class="mb-1 text-primary">Emergency Contacts</h3>
+                        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                            <h4 style="margin: 0 0 0.25rem 0;">Sarah Johnson (Daughter)</h4>
+                            <p class="text-success" style="font-size: 0.85rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-star"></i> Primary Caregiver</p>
+                            <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0;">+1 555-0202</p>
                         </div>
+                        <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem;">
+                            <h4 style="margin: 0 0 0.25rem 0;">Dr. Patel</h4>
+                            <p class="text-primary" style="font-size: 0.85rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-user-doctor"></i> Primary Physician</p>
+                            <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0;">+1 555-0303</p>
+                        </div>
+                        <button class="btn btn-primary w-100 mt-2" style="width: 100%; justify-content: center; margin-top: 1rem;" onclick="addEmergencyContact()"><i class="fa-solid fa-plus"></i> Add Contact</button>
                     </div>
                 </div>
             </div>
@@ -943,7 +937,7 @@
         .highlight-node { background-color: rgba(79, 70, 229, 0.4) !important; transition: 0.3s; transform: scale(1.05); }
     </style>
 
-    <script src="app.js?v=2"></script>
+    <script src="app.js?v=3"></script>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {

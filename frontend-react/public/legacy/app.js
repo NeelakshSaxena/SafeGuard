@@ -1,16 +1,50 @@
 const API_BASE = 'http://127.0.0.1:5000/api';
 let globalElderlyData = [];
+let currentRole = '';
 
 // --- Initialization & UI Logic ---
 document.addEventListener('DOMContentLoaded', () => {
     updateClock();
     setInterval(updateClock, 1000);
     
-    // Check role in localStorage or default to caregiver
-    const savedRole = localStorage.getItem('safeguard_role') || 'caregiver';
-    document.getElementById('roleSwitcher').value = savedRole;
-    changeRole(true); // initialized
+    // Check role in localStorage
+    const savedRole = localStorage.getItem('safeguard_role');
+    if (savedRole) {
+        document.getElementById('loginScreen').style.display = 'none';
+        currentRole = savedRole;
+        changeRole(true); // initialized
+    } else {
+        document.getElementById('loginScreen').style.display = 'flex';
+    }
 });
+
+function handleLogin(e) {
+    e.preventDefault();
+    const loginId = document.getElementById('loginId').value.toLowerCase().trim();
+    
+    if (loginId.startsWith('patient')) {
+        currentRole = 'elderly';
+    } else if (loginId.startsWith('caregiver')) {
+        currentRole = 'caregiver';
+    } else if (loginId.startsWith('doctor')) {
+        currentRole = 'doctor';
+    } else {
+        showToast('Invalid ID format. Use patient1, caregiver1, or doctor1.', 'danger');
+        return;
+    }
+    
+    localStorage.setItem('safeguard_role', currentRole);
+    document.getElementById('loginScreen').style.display = 'none';
+    changeRole(true);
+}
+
+function handleLogout() {
+    localStorage.removeItem('safeguard_role');
+    currentRole = '';
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('loginId').value = '';
+    document.getElementById('loginPass').value = '';
+}
 
 function updateClock() {
     const now = new Date();
@@ -18,8 +52,7 @@ function updateClock() {
 }
 
 function changeRole(isInit = false) {
-    const role = document.getElementById('roleSwitcher').value;
-    localStorage.setItem('safeguard_role', role);
+    const role = currentRole;
     
     // Update Header
     const label = document.getElementById('currentUserLabel');
@@ -33,20 +66,13 @@ function changeRole(isInit = false) {
     // Show role-specific nav groups
     if(role === 'caregiver') {
         document.querySelectorAll('.caregiver-only').forEach(el => el.style.display = 'block');
-        if(!isInit) switchTab('dashboard');
+        switchTab('dashboard');
     } else if(role === 'elderly') {
         document.querySelectorAll('.elderly-only').forEach(el => el.style.display = 'block');
-        if(!isInit) switchTab('elderly-app');
+        switchTab('elderly-app');
     } else if(role === 'doctor') {
         document.querySelectorAll('.doctor-only').forEach(el => el.style.display = 'block');
-        if(!isInit) switchTab('clinical');
-    }
-    
-    // Initial fetch if we just loaded
-    if(isInit) {
-        if(role === 'caregiver') switchTab('dashboard');
-        else if(role === 'elderly') switchTab('elderly-app');
-        else if(role === 'doctor') switchTab('clinical');
+        switchTab('clinical');
     }
 }
 
@@ -57,11 +83,13 @@ function switchTab(tabId) {
     const activeNav = document.querySelector(`.nav-item[data-tab="${tabId}"]`);
     if(activeNav) activeNav.classList.add('active');
     
-    document.getElementById(tabId).classList.add('active');
+    const tabEl = document.getElementById(tabId);
+    if(tabEl) tabEl.classList.add('active');
     
     // Breadcrumbs
     const tabName = activeNav ? activeNav.innerText.trim() : tabId;
-    document.getElementById('breadcrumb').innerText = `SafeGuard > ${document.getElementById('roleSwitcher').value.toUpperCase()} > ${tabName}`;
+    const displayRole = currentRole ? currentRole.toUpperCase() : 'UNKNOWN';
+    document.getElementById('breadcrumb').innerText = `SafeGuard > ${displayRole} > ${tabName}`;
     
     // Data Fetching
     if (tabId === 'dashboard') fetchDashboardStats();
@@ -69,6 +97,12 @@ function switchTab(tabId) {
     if (tabId === 'analytics') fetchAnalytics();
     if (tabId === 'dbviz') fetchDbStats();
     if (tabId === 'clinical') fetchClinicalData();
+    // Patient view tabs
+    if (tabId === 'telehealth') loadConsultations();
+    if (tabId === 'prescriptions') loadRefills();
+    if (tabId === 'wearables') loadDevices();
+    if (tabId === 'my-profile') loadProfile();
+    if (tabId === 'elderly-app') { loadHealthLogs(); updateNotifBadge(); }
 }
 
 // --- Modals and Sidebars ---
@@ -433,9 +467,24 @@ function simulateElderlyCheckin() {
     }, 800);
 }
 
-function logHealth(type) {
+async function logHealth(type) {
+    const severity = (type === 'Fall') ? 'Critical' : (type === 'Felt Dizzy') ? 'Warning' : 'Info';
+    try {
+        const res = await fetch(`${API_BASE}/health-logs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ event_type: type, severity: severity, notes: `${type} logged by patient` })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`${type} logged to database (ID: ${data.log_id})`, severity === 'Critical' ? 'danger' : 'success');
+            loadHealthLogs();
+            updateNotifBadge();
+        }
+    } catch (e) {
+        showToast('Failed to log event – server offline', 'danger');
+    }
     submitCheckinPayload(1, 0, 0, type);
-    alert(`[DB SYNC] ${type} event securely logged to HEALTH_EVENT table.`);
 }
 
 async function submitCheckinPayload(elderId, lat, lng, type) {
@@ -456,9 +505,37 @@ function startSOS() {
     bar.style.transition = 'width 3s linear';
     bar.style.width = '100%';
     
-    sosTimeout = setTimeout(() => {
-        alert('🆘 EMERGENCY SOS TRIGGERED!\n\n1. Calling Primary Caregiver\n2. Sharing live location\n3. Alerting all assigned staff');
-        submitCheckinPayload(1, 0, 0, 'SOS');
+    sosTimeout = setTimeout(async () => {
+        // Create emergency modal
+        let sosModal = document.getElementById('sosModal');
+        if (!sosModal) {
+            sosModal = document.createElement('div');
+            sosModal.id = 'sosModal';
+            sosModal.className = 'modal';
+            sosModal.innerHTML = `
+                <div class="modal-content" style="max-width:450px;border:2px solid var(--danger);text-align:center;">
+                    <div style="font-size:4rem;margin-bottom:1rem;">🆘</div>
+                    <h2 class="text-danger" style="margin-bottom:1rem;">EMERGENCY SOS TRIGGERED</h2>
+                    <div style="text-align:left;background:rgba(239,68,68,0.1);padding:1rem;border-radius:0.5rem;margin-bottom:1rem;">
+                        <p style="margin-bottom:0.5rem;"><i class="fa-solid fa-phone text-success"></i> Calling Primary Caregiver...</p>
+                        <p style="margin-bottom:0.5rem;"><i class="fa-solid fa-location-dot text-primary"></i> Sharing live location...</p>
+                        <p><i class="fa-solid fa-bell text-warning"></i> Alerting all assigned staff...</p>
+                    </div>
+                    <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;">Emergency services have been notified. Stay calm.</p>
+                    <button class="btn btn-outline" style="width:100%;justify-content:center;" onclick="closeModal('sosModal')">Dismiss</button>
+                </div>
+            `;
+            document.body.appendChild(sosModal);
+        }
+        sosModal.classList.add('active');
+        await submitCheckinPayload(1, 0, 0, 'SOS');
+        try {
+            await fetch(`${API_BASE}/health-logs`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ event_type: 'SOS Emergency', severity: 'Critical', notes: 'Patient triggered SOS button' })
+            });
+        } catch(e) { console.error(e); }
         cancelSOS();
     }, 3000);
 }
@@ -486,3 +563,617 @@ window.addEventListener("message", (event) => {
         setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 500); }, 4000);
     }
 });
+
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    const bgColor = type === 'success' ? 'var(--success)' : type === 'warning' ? 'var(--warning)' : type === 'danger' ? 'var(--danger)' : 'var(--primary)';
+    toast.style = `position: fixed; bottom: 20px; right: 20px; background: ${bgColor}; color: white; padding: 1rem; border-radius: 0.5rem; z-index: 9999; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: opacity 0.5s; display: flex; align-items: center; gap: 0.5rem; max-width: 400px;`;
+    
+    let icon = 'fa-circle-info';
+    if(type === 'success') icon = 'fa-circle-check';
+    if(type === 'warning' || type === 'danger') icon = 'fa-triangle-exclamation';
+    
+    toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${message}</span>`;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 500);
+    }, 3000);
+}
+
+// ==========================================
+// REAL PATIENT ACTION HANDLERS
+// ==========================================
+
+// --- Messaging ---
+async function openMessageModal(doctorName) {
+    const modal = document.getElementById('messageModal');
+    if (!modal) {
+        // Create modal dynamically
+        const m = document.createElement('div');
+        m.id = 'messageModal';
+        m.className = 'modal';
+        m.innerHTML = `
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h3 id="msgModalTitle">Message Doctor</h3>
+                    <button class="btn btn-outline btn-sm" onclick="closeModal('messageModal')">✕</button>
+                </div>
+                <textarea id="msgBody" rows="4" placeholder="Type your message..." style="width: 100%; background: var(--bg); color: var(--text-main); border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.75rem; font-family: 'Outfit',sans-serif; resize: vertical; margin-bottom: 1rem;"></textarea>
+                <button id="msgSendBtn" class="btn btn-primary" style="width: 100%; justify-content: center;" onclick="sendMessage()">
+                    <i class="fa-solid fa-paper-plane"></i> Send Message
+                </button>
+                <div id="msgHistory" style="margin-top: 1rem; max-height: 200px; overflow-y: auto;"></div>
+            </div>
+        `;
+        document.body.appendChild(m);
+    }
+    document.getElementById('msgModalTitle').innerText = `Message ${doctorName}`;
+    document.getElementById('msgBody').value = '';
+    document.getElementById('msgSendBtn').setAttribute('data-recipient', doctorName);
+    document.getElementById('messageModal').classList.add('active');
+    // Load message history
+    try {
+        const res = await fetch(`${API_BASE}/messages`);
+        const msgs = await res.json();
+        const filtered = msgs.filter(m => m.recipient === doctorName || m.sender === doctorName);
+        const histDiv = document.getElementById('msgHistory');
+        if (filtered.length > 0) {
+            histDiv.innerHTML = '<p class="text-muted" style="font-size:0.8rem; margin-bottom:0.5rem;">Previous messages:</p>' +
+                filtered.map(m => `<div style="background:rgba(255,255,255,0.03);padding:0.5rem;border-radius:0.25rem;margin-bottom:0.5rem;font-size:0.85rem;"><strong>${m.sender}</strong>: ${m.body} <span class="text-muted" style="font-size:0.75rem;">${m.timestamp}</span></div>`).join('');
+        } else {
+            histDiv.innerHTML = '<p class="text-muted" style="font-size:0.85rem;">No previous messages.</p>';
+        }
+    } catch(e) { console.error(e); }
+}
+
+async function sendMessage() {
+    const btn = document.getElementById('msgSendBtn');
+    const body = document.getElementById('msgBody').value.trim();
+    const recipient = btn.getAttribute('data-recipient');
+    if (!body) { showToast('Please type a message', 'warning'); return; }
+    
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
+    btn.disabled = true;
+    try {
+        const res = await fetch(`${API_BASE}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recipient, body })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`Message delivered to ${recipient}`, 'success');
+            document.getElementById('msgBody').value = '';
+            // Refresh history
+            openMessageModal(recipient);
+            updateNotifBadge();
+        }
+    } catch(e) {
+        showToast('Failed to send – server offline', 'danger');
+    }
+    btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Message';
+    btn.disabled = false;
+}
+
+// --- Book Consultation ---
+async function bookConsultation(doctorName, specialty) {
+    const modal = document.getElementById('bookModal');
+    if (!modal) {
+        const m = document.createElement('div');
+        m.id = 'bookModal';
+        m.className = 'modal';
+        m.innerHTML = `
+            <div class="modal-content" style="max-width: 450px;">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h3 id="bookModalTitle">Book Consultation</h3>
+                    <button class="btn btn-outline btn-sm" onclick="closeModal('bookModal')">✕</button>
+                </div>
+                <label class="text-muted" style="font-size:0.85rem;">Select Date & Time:</label>
+                <input type="datetime-local" id="bookDateTime" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;margin:0.5rem 0 1rem;font-family:'Outfit',sans-serif;">
+                <button id="bookConfirmBtn" class="btn btn-success" style="width:100%;justify-content:center;">
+                    <i class="fa-solid fa-calendar-check"></i> Confirm Booking
+                </button>
+            </div>
+        `;
+        document.body.appendChild(m);
+    }
+    document.getElementById('bookModalTitle').innerText = `Book ${doctorName}`;
+    document.getElementById('bookDateTime').value = '';
+    const confirmBtn = document.getElementById('bookConfirmBtn');
+    confirmBtn.onclick = async () => {
+        const dt = document.getElementById('bookDateTime').value;
+        if (!dt) { showToast('Please select a date & time', 'warning'); return; }
+        const formatted = new Date(dt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+        confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Booking...';
+        confirmBtn.disabled = true;
+        try {
+            const res = await fetch(`${API_BASE}/consultations`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ doctor_name: doctorName, specialty, scheduled_at: formatted })
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast(`Consultation booked with ${doctorName} on ${formatted}`, 'success');
+                closeModal('bookModal');
+                loadConsultations();
+                updateNotifBadge();
+            }
+        } catch(e) {
+            showToast('Booking failed – server offline', 'danger');
+        }
+        confirmBtn.innerHTML = '<i class="fa-solid fa-calendar-check"></i> Confirm Booking';
+        confirmBtn.disabled = false;
+    };
+    document.getElementById('bookModal').classList.add('active');
+}
+
+// --- Load Consultations from DB ---
+async function loadConsultations() {
+    try {
+        const res = await fetch(`${API_BASE}/consultations`);
+        const consults = await res.json();
+        const container = document.getElementById('consultationsList');
+        if (!container) return;
+        container.innerHTML = '';
+        consults.forEach(c => {
+            const isCompleted = c.status === 'Completed';
+            const borderColor = isCompleted ? 'var(--success)' : 'var(--warning)';
+            const statusIcon = isCompleted ? '<i class="fa-solid fa-check text-success"></i>' : '<i class="fa-regular fa-clock text-warning"></i>';
+            const statusLabel = isCompleted ? '<span class="text-success" style="font-size:0.85rem;">Completed</span>' : '<span class="chip">Upcoming</span>';
+            const actions = isCompleted
+                ? `<div class="mt-2" style="margin-top:0.5rem;display:flex;gap:0.5rem;">
+                     <button class="btn btn-sm btn-outline" onclick="showConsultNotes('${c.notes.replace(/'/g, "\\'")}')">View Notes</button>
+                   </div>`
+                : `<div class="mt-2" style="margin-top:0.5rem;display:flex;gap:0.5rem;">
+                     <button class="btn btn-sm btn-outline" onclick="openMessageModal('${c.doctor_name}')">Message</button>
+                     <button class="btn btn-sm btn-outline" onclick="addReminder('${c.doctor_name}','${c.scheduled_at}')">Add Reminder</button>
+                   </div>`;
+            container.innerHTML += `
+                <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);padding:1rem;border-radius:0.5rem;margin-bottom:1rem;border-left:3px solid ${borderColor};">
+                    <div class="d-flex justify-between align-center mb-1">
+                        <strong>${statusIcon} ${c.scheduled_at} - ${c.doctor_name}</strong>
+                        ${statusLabel}
+                    </div>
+                    <p class="text-muted" style="font-size:0.85rem;">${c.specialty}${c.notes ? ' – ' + c.notes : ''}</p>
+                    ${actions}
+                </div>
+            `;
+        });
+    } catch(e) { console.error(e); }
+}
+
+function showConsultNotes(notes) {
+    const modal = document.getElementById('notesModal');
+    if (!modal) {
+        const m = document.createElement('div');
+        m.id = 'notesModal';
+        m.className = 'modal';
+        m.innerHTML = `
+            <div class="modal-content" style="max-width:450px;">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h3>Doctor Notes</h3>
+                    <button class="btn btn-outline btn-sm" onclick="closeModal('notesModal')">✕</button>
+                </div>
+                <div id="notesContent" style="background:var(--bg);padding:1rem;border-radius:0.5rem;font-size:0.9rem;"></div>
+            </div>
+        `;
+        document.body.appendChild(m);
+    }
+    document.getElementById('notesContent').innerText = notes;
+    document.getElementById('notesModal').classList.add('active');
+}
+
+function addReminder(doctor, time) {
+    showToast(`Reminder set for ${doctor} on ${time}`, 'success');
+}
+
+// --- Medication Refills ---
+async function requestRefill(medicationName, pharmacy) {
+    try {
+        const res = await fetch(`${API_BASE}/refills`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ medication_name: medicationName, pharmacy })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`Refill #${data.refill_id} submitted to ${pharmacy} (Status: ${data.status})`, 'success');
+            loadRefills();
+            updateNotifBadge();
+        }
+    } catch(e) {
+        showToast('Refill request failed – server offline', 'danger');
+    }
+}
+
+async function loadRefills() {
+    try {
+        const res = await fetch(`${API_BASE}/refills`);
+        const refills = await res.json();
+        const container = document.getElementById('refillHistory');
+        if (!container) return;
+        if (refills.length === 0) {
+            container.innerHTML = '<p class="text-muted" style="font-size:0.85rem;">No refill history yet.</p>';
+            return;
+        }
+        container.innerHTML = '<h4 class="text-muted" style="font-size:0.75rem;text-transform:uppercase;margin-bottom:0.5rem;">Refill History (from Database)</h4>';
+        refills.forEach(r => {
+            const color = r.status === 'Pending' ? 'var(--warning)' : 'var(--success)';
+            container.innerHTML += `<div style="font-size:0.85rem;margin-bottom:0.5rem;display:flex;justify-content:space-between;"><span>${r.medication_name} → ${r.pharmacy}</span><span style="color:${color}">${r.status} (${r.timestamp})</span></div>`;
+        });
+    } catch(e) { console.error(e); }
+}
+
+// --- Set Medication Alert ---
+function setMedAlert(medicationName) {
+    if (Notification.permission === 'granted' || Notification.permission === 'default') {
+        Notification.requestPermission().then(perm => {
+            if (perm === 'granted') {
+                showToast(`Browser alert enabled for ${medicationName}`, 'success');
+            } else {
+                showToast(`Alert saved in-app for ${medicationName}`, 'success');
+            }
+        });
+    } else {
+        showToast(`Alert saved in-app for ${medicationName}`, 'success');
+    }
+}
+
+// --- Download Prescription List ---
+function downloadPrescriptions() {
+    const text = `SafeGuard - Prescription Report\n================================\nGenerated: ${new Date().toLocaleString()}\n\n1. Metformin 1000mg\n   Prescribed by: Dr. Patel (Oct 1, 2024)\n   Dosage: Once daily (morning)\n   Refills: 2 remaining\n   Pharmacy: Apollo (2km)\n\n2. Atenolol 50mg\n   Prescribed by: Dr. Sharma (Sep 15)\n   Dosage: Once daily (evening)\n   Refills: 0 remaining (Expiring Oct 15)\n\nAllergies: Penicillin\nInteractions: Avoid Alcohol with Atenolol\n`;
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'safeguard_prescriptions.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Prescription report downloaded', 'success');
+}
+
+// --- Devices ---
+async function loadDevices() {
+    try {
+        const res = await fetch(`${API_BASE}/devices`);
+        const devices = await res.json();
+        const container = document.getElementById('devicesGrid');
+        if (!container) return;
+        container.innerHTML = '';
+        devices.forEach(d => {
+            const battColor = d.battery > 50 ? 'var(--success)' : d.battery > 20 ? 'var(--warning)' : 'var(--danger)';
+            container.innerHTML += `
+                <div class="card" style="border-left: 4px solid ${battColor};">
+                    <div class="d-flex justify-between align-center mb-1">
+                        <h3 style="margin:0;"><i class="fa-solid ${d.device_type === 'Smartwatch' ? 'fa-clock' : 'fa-heart-pulse'}"></i> ${d.name}</h3>
+                        <span style="color:${battColor};font-size:0.85rem;">✓ ${d.status} (${d.battery}%)</span>
+                    </div>
+                    <div style="margin: 1rem 0;">
+                        <div style="width:100%;height:6px;background:var(--bg);border-radius:3px;">
+                            <div style="width:${d.battery}%;height:100%;background:${battColor};border-radius:3px;"></div>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:0.5rem;">
+                        <button class="btn btn-sm btn-outline" style="flex:1;justify-content:center;" onclick="showToast('${d.name} settings loaded','success')">Settings</button>
+                        <button class="btn btn-sm btn-danger" style="justify-content:center;" onclick="removeDevice(${d.device_id},'${d.name}')"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                </div>
+            `;
+        });
+        // Add the activity ring card
+        container.innerHTML += `
+            <div class="card">
+                <h3 class="mb-1 text-primary">Daily Activity Ring</h3>
+                <div style="text-align:center;padding:1rem 0;">
+                    <div style="position:relative;width:120px;height:120px;margin:0 auto;border-radius:50%;border:10px solid var(--border);border-top-color:var(--success);transform:rotate(-45deg);">
+                        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(45deg);font-size:1.5rem;font-weight:bold;color:var(--success);">100%</div>
+                    </div>
+                    <p class="text-muted" style="margin-top:1rem;">All activity goals met!</p>
+                </div>
+            </div>
+        `;
+    } catch(e) { console.error(e); }
+}
+
+async function addDevice() {
+    const modal = document.getElementById('addDeviceModal');
+    if (!modal) {
+        const m = document.createElement('div');
+        m.id = 'addDeviceModal';
+        m.className = 'modal';
+        m.innerHTML = `
+            <div class="modal-content" style="max-width:400px;">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h3>Add Device</h3>
+                    <button class="btn btn-outline btn-sm" onclick="closeModal('addDeviceModal')">✕</button>
+                </div>
+                <input type="text" id="deviceName" placeholder="Device name (e.g. Fitbit Charge 5)" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;margin-bottom:0.75rem;font-family:'Outfit',sans-serif;">
+                <select id="deviceType" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;margin-bottom:1rem;font-family:'Outfit',sans-serif;">
+                    <option value="Smartwatch">Smartwatch</option>
+                    <option value="BP Monitor">BP Monitor</option>
+                    <option value="Glucose Monitor">Glucose Monitor</option>
+                    <option value="Pulse Oximeter">Pulse Oximeter</option>
+                    <option value="Other">Other</option>
+                </select>
+                <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="submitDevice()">
+                    <i class="fa-solid fa-plus"></i> Add Device
+                </button>
+            </div>
+        `;
+        document.body.appendChild(m);
+    }
+    document.getElementById('deviceName').value = '';
+    document.getElementById('addDeviceModal').classList.add('active');
+}
+
+async function submitDevice() {
+    const name = document.getElementById('deviceName').value.trim();
+    const type = document.getElementById('deviceType').value;
+    if (!name) { showToast('Enter a device name', 'warning'); return; }
+    try {
+        const res = await fetch(`${API_BASE}/devices`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, device_type: type })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`${name} added successfully`, 'success');
+            closeModal('addDeviceModal');
+            loadDevices();
+            updateNotifBadge();
+        }
+    } catch(e) {
+        showToast('Failed to add device', 'danger');
+    }
+}
+
+async function removeDevice(id, name) {
+    if (!confirm(`Remove ${name}?`)) return;
+    try {
+        await fetch(`${API_BASE}/devices/${id}`, { method: 'DELETE' });
+        showToast(`${name} removed`, 'warning');
+        loadDevices();
+    } catch(e) { showToast('Failed to remove device', 'danger'); }
+}
+
+// --- Profile ---
+async function loadProfile() {
+    try {
+        const res = await fetch(`${API_BASE}/profile`);
+        const p = await res.json();
+        const container = document.getElementById('profileData');
+        if (!container) return;
+        container.innerHTML = `
+            <div style="text-align:center;margin-bottom:1.5rem;">
+                <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=10B981&color=fff&rounded=true&size=100" alt="Profile" style="margin-bottom:1rem;">
+                <h3 style="margin:0;" id="profileName">${p.name}</h3>
+                <p class="text-muted">Blood Group: ${p.blood_group}</p>
+            </div>
+            <div style="border-top:1px solid var(--border);padding-top:1rem;">
+                <div class="d-flex justify-between mb-1"><span class="text-muted">Email</span><span id="profileEmail">${p.email}</span></div>
+                <div class="d-flex justify-between mb-1"><span class="text-muted">Phone</span><span id="profilePhone">${p.phone}</span></div>
+                <div class="d-flex justify-between mb-1"><span class="text-muted">Date of Birth</span><span>${p.dob}</span></div>
+                <div class="d-flex justify-between mb-1"><span class="text-muted">Address</span><span>${p.address}</span></div>
+                <button class="btn btn-outline w-100 mt-2" style="width:100%;justify-content:center;margin-top:1rem;" onclick="editProfile()">Edit Profile</button>
+            </div>
+        `;
+    } catch(e) { console.error(e); }
+}
+
+function editProfile() {
+    const modal = document.getElementById('editProfileModal');
+    if (!modal) {
+        const m = document.createElement('div');
+        m.id = 'editProfileModal';
+        m.className = 'modal';
+        m.innerHTML = `
+            <div class="modal-content" style="max-width:450px;">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h3>Edit Profile</h3>
+                    <button class="btn btn-outline btn-sm" onclick="closeModal('editProfileModal')">✕</button>
+                </div>
+                <div style="display:grid;gap:0.75rem;">
+                    <input type="text" id="editName" placeholder="Full Name" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
+                    <input type="email" id="editEmail" placeholder="Email" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
+                    <input type="text" id="editPhone" placeholder="Phone" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
+                    <input type="text" id="editAddress" placeholder="Address" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
+                    <button class="btn btn-success" style="width:100%;justify-content:center;" onclick="saveProfile()">
+                        <i class="fa-solid fa-floppy-disk"></i> Save Changes
+                    </button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(m);
+    }
+    // Pre-fill with current values
+    const name = document.getElementById('profileName');
+    const email = document.getElementById('profileEmail');
+    const phone = document.getElementById('profilePhone');
+    if (name) document.getElementById('editName').value = name.innerText;
+    if (email) document.getElementById('editEmail').value = email.innerText;
+    if (phone) document.getElementById('editPhone').value = phone.innerText;
+    document.getElementById('editProfileModal').classList.add('active');
+}
+
+async function saveProfile() {
+    const data = {
+        name: document.getElementById('editName').value.trim(),
+        email: document.getElementById('editEmail').value.trim(),
+        phone: document.getElementById('editPhone').value.trim(),
+        address: document.getElementById('editAddress').value.trim()
+    };
+    // Remove empty fields
+    Object.keys(data).forEach(k => { if (!data[k]) delete data[k]; });
+    try {
+        const res = await fetch(`${API_BASE}/profile`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (result.success) {
+            showToast('Profile updated successfully', 'success');
+            closeModal('editProfileModal');
+            loadProfile();
+        }
+    } catch(e) {
+        showToast('Failed to save profile', 'danger');
+    }
+}
+
+// --- Notifications ---
+async function handleNotifications() {
+    const modal = document.getElementById('notifModal');
+    if (!modal) {
+        const m = document.createElement('div');
+        m.id = 'notifModal';
+        m.className = 'modal';
+        m.innerHTML = `
+            <div class="modal-content" style="max-width:500px;">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h3><i class="fa-solid fa-bell"></i> Notifications</h3>
+                    <button class="btn btn-outline btn-sm" onclick="closeModal('notifModal')">✕</button>
+                </div>
+                <div id="notifList" style="max-height:400px;overflow-y:auto;"></div>
+            </div>
+        `;
+        document.body.appendChild(m);
+    }
+    document.getElementById('notifModal').classList.add('active');
+    try {
+        const res = await fetch(`${API_BASE}/notifications`);
+        const notifs = await res.json();
+        const container = document.getElementById('notifList');
+        if (notifs.length === 0) {
+            container.innerHTML = '<p class="text-muted" style="text-align:center;padding:2rem;">No notifications yet.</p>';
+            return;
+        }
+        container.innerHTML = '';
+        notifs.forEach(n => {
+            const bg = n.read ? 'transparent' : 'rgba(79,70,229,0.1)';
+            const dot = n.read ? '' : '<span style="width:8px;height:8px;border-radius:50%;background:var(--primary);display:inline-block;margin-right:0.5rem;"></span>';
+            container.innerHTML += `
+                <div style="background:${bg};padding:0.75rem;border-radius:0.5rem;margin-bottom:0.5rem;border:1px solid var(--border);cursor:pointer;" onclick="markNotifRead(${n.notif_id},this)">
+                    <div class="d-flex justify-between align-center">
+                        <strong style="font-size:0.9rem;">${dot}${n.title}</strong>
+                        <span class="text-muted" style="font-size:0.75rem;">${n.timestamp}</span>
+                    </div>
+                    <p class="text-muted" style="font-size:0.85rem;margin:0.25rem 0 0;">${n.body}</p>
+                </div>
+            `;
+        });
+    } catch(e) {
+        document.getElementById('notifList').innerHTML = '<p class="text-muted">Failed to load notifications.</p>';
+    }
+}
+
+async function markNotifRead(id, el) {
+    try {
+        await fetch(`${API_BASE}/notifications/${id}/read`, { method: 'POST' });
+        el.style.background = 'transparent';
+        el.querySelector('span[style*="border-radius:50%"]')?.remove();
+        updateNotifBadge();
+    } catch(e) { console.error(e); }
+}
+
+async function updateNotifBadge() {
+    try {
+        const res = await fetch(`${API_BASE}/notifications/count`);
+        const data = await res.json();
+        const badge = document.getElementById('alertBadge');
+        if (badge) badge.innerText = data.unread || '0';
+    } catch(e) { console.error(e); }
+}
+
+// --- Health Log History ---
+async function loadHealthLogs() {
+    try {
+        const res = await fetch(`${API_BASE}/health-logs`);
+        const logs = await res.json();
+        const container = document.getElementById('healthLogHistory');
+        if (!container) return;
+        if (logs.length === 0) {
+            container.innerHTML = '<p class="text-muted" style="font-size:0.85rem;">No health events recorded yet. Use the quick log buttons above.</p>';
+            return;
+        }
+        container.innerHTML = '<h4 class="text-muted" style="font-size:0.75rem;text-transform:uppercase;margin-bottom:0.5rem;">Recent Health Logs (from DB)</h4>';
+        logs.slice(0, 5).forEach(l => {
+            const color = l.severity === 'Critical' ? 'var(--danger)' : l.severity === 'Warning' ? 'var(--warning)' : 'var(--success)';
+            container.innerHTML += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:0.5rem;padding:0.5rem;background:rgba(255,255,255,0.02);border-radius:0.25rem;border-left:3px solid ${color};"><span>${l.event_type}</span><span class="text-muted">${l.timestamp}</span></div>`;
+        });
+    } catch(e) { console.error(e); }
+}
+
+// --- Emergency Contact ---
+function addEmergencyContact() {
+    const modal = document.getElementById('addContactModal');
+    if (!modal) {
+        const m = document.createElement('div');
+        m.id = 'addContactModal';
+        m.className = 'modal';
+        m.innerHTML = `
+            <div class="modal-content" style="max-width:400px;">
+                <div class="d-flex justify-between align-center mb-2">
+                    <h3>Add Emergency Contact</h3>
+                    <button class="btn btn-outline btn-sm" onclick="closeModal('addContactModal')">✕</button>
+                </div>
+                <input type="text" id="contactName" placeholder="Contact Name" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;margin-bottom:0.75rem;font-family:'Outfit',sans-serif;">
+                <input type="text" id="contactRelation" placeholder="Relationship (e.g. Son, Nurse)" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;margin-bottom:0.75rem;font-family:'Outfit',sans-serif;">
+                <input type="text" id="contactPhone" placeholder="Phone Number" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;margin-bottom:1rem;font-family:'Outfit',sans-serif;">
+                <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="saveContact()">
+                    <i class="fa-solid fa-user-plus"></i> Save Contact
+                </button>
+            </div>
+        `;
+        document.body.appendChild(m);
+    }
+    document.getElementById('contactName').value = '';
+    document.getElementById('contactRelation').value = '';
+    document.getElementById('contactPhone').value = '';
+    document.getElementById('addContactModal').classList.add('active');
+}
+
+function saveContact() {
+    const name = document.getElementById('contactName').value.trim();
+    const relation = document.getElementById('contactRelation').value.trim();
+    const phone = document.getElementById('contactPhone').value.trim();
+    if (!name || !phone) { showToast('Name and phone are required', 'warning'); return; }
+    
+    // Add to the contacts list in the DOM
+    const contactsList = document.querySelector('#my-profile .card:last-child');
+    if (contactsList) {
+        const btn = contactsList.querySelector('button');
+        const newContact = document.createElement('div');
+        newContact.style = 'background:rgba(255,255,255,0.02);border:1px solid var(--border);padding:1rem;border-radius:0.5rem;margin-bottom:1rem;';
+        newContact.innerHTML = `
+            <h4 style="margin:0 0 0.25rem 0;">${name} (${relation})</h4>
+            <p class="text-success" style="font-size:0.85rem;margin-bottom:0.5rem;"><i class="fa-solid fa-user-check"></i> Emergency Contact</p>
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:0;">${phone}</p>
+        `;
+        btn.parentNode.insertBefore(newContact, btn);
+    }
+    showToast(`${name} added as emergency contact`, 'success');
+    closeModal('addContactModal');
+}
+
+// Keep legacy handleAction for any remaining simple buttons
+function handleAction(btn, newText, toastMessage, toastType = 'success') {
+    if(btn.disabled) return;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Processing...`;
+    btn.style.opacity = '0.7';
+    setTimeout(() => {
+        showToast(toastMessage, toastType);
+        btn.innerHTML = newText;
+        btn.disabled = true;
+        btn.style.cursor = 'not-allowed';
+        if(toastType === 'success') {
+            btn.classList.remove('btn-primary', 'btn-outline', 'btn-danger', 'btn-warning');
+            btn.classList.add('btn-success');
+        }
+    }, 800);
+}
+

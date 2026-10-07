@@ -64,7 +64,105 @@ class AuditLog(Base):
     table_name = Column(String)
     timestamp = Column(DateTime, default=datetime.utcnow)
 
+class Message(Base):
+    __tablename__ = "messages"
+    message_id = Column(Integer, primary_key=True, index=True)
+    sender = Column(String)
+    recipient = Column(String)
+    body = Column(String)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+class MedicationRefill(Base):
+    __tablename__ = "medication_refills"
+    refill_id = Column(Integer, primary_key=True, index=True)
+    elder_id = Column(Integer, default=1)
+    medication_name = Column(String)
+    pharmacy = Column(String, default="Apollo Pharmacy")
+    status = Column(String, default="Pending")
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+class HealthLog(Base):
+    __tablename__ = "health_logs"
+    log_id = Column(Integer, primary_key=True, index=True)
+    elder_id = Column(Integer, default=1)
+    event_type = Column(String)
+    severity = Column(String, default="Info")
+    notes = Column(String, default="")
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    notif_id = Column(Integer, primary_key=True, index=True)
+    elder_id = Column(Integer, default=1)
+    title = Column(String)
+    body = Column(String)
+    read = Column(Boolean, default=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+class Device(Base):
+    __tablename__ = "devices"
+    device_id = Column(Integer, primary_key=True, index=True)
+    elder_id = Column(Integer, default=1)
+    name = Column(String)
+    device_type = Column(String)
+    status = Column(String, default="Connected")
+    battery = Column(Integer, default=100)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+class PatientProfile(Base):
+    __tablename__ = "patient_profiles"
+    profile_id = Column(Integer, primary_key=True, index=True)
+    elder_id = Column(Integer, default=1)
+    name = Column(String, default="Patient User")
+    email = Column(String, default="patient@example.com")
+    phone = Column(String, default="+1 555-0101")
+    dob = Column(String, default="Jan 15, 1948")
+    blood_group = Column(String, default="O+")
+    address = Column(String, default="123 Elm Street, Springfield")
+
+class Consultation(Base):
+    __tablename__ = "consultations"
+    consult_id = Column(Integer, primary_key=True, index=True)
+    elder_id = Column(Integer, default=1)
+    doctor_name = Column(String)
+    specialty = Column(String, default="General")
+    scheduled_at = Column(String)
+    status = Column(String, default="Upcoming")
+    notes = Column(String, default="")
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
 Base.metadata.create_all(bind=engine)
+
+# Seed default data on startup
+def seed_data():
+    db = SessionLocal()
+    try:
+        # Seed default profile if none exists
+        if db.query(PatientProfile).count() == 0:
+            db.add(PatientProfile())
+            db.commit()
+        # Seed default devices
+        if db.query(Device).count() == 0:
+            db.add_all([
+                Device(name="Apple Watch Series 9", device_type="Smartwatch", battery=87),
+                Device(name="Omron BP Monitor", device_type="BP Monitor", battery=92),
+            ])
+            db.commit()
+        # Seed welcome notification
+        if db.query(Notification).count() == 0:
+            db.add(Notification(title="Welcome to SafeGuard", body="Your patient dashboard is ready."))
+            db.commit()
+        # Seed sample consultations
+        if db.query(Consultation).count() == 0:
+            db.add_all([
+                Consultation(doctor_name="Dr. Patel", specialty="General Practice", scheduled_at="Oct 6, 10:00 AM", status="Completed", notes="Continue current meds. Mild headache reported."),
+                Consultation(doctor_name="Dr. Sharma", specialty="Cardiologist", scheduled_at="Oct 8, 3:00 PM", status="Upcoming", notes="Cardiology follow-up"),
+            ])
+            db.commit()
+    finally:
+        db.close()
+
+seed_data()
 
 def get_db():
     db = SessionLocal()
@@ -155,6 +253,11 @@ async def submit_checkin(req: CheckInSchema, db: Session = Depends(get_db)):
     new_checkin = CheckIn(elder_id=req.elder_id, latitude=req.latitude, longitude=req.longitude)
     db.add(new_checkin)
     db.commit()
+    # Also log as health event if it's a special type
+    if req.type != "Standard":
+        severity = "Critical" if req.type in ["Fall", "SOS"] else "Info"
+        db.add(HealthLog(elder_id=req.elder_id, event_type=req.type, severity=severity))
+        db.commit()
     await sio.emit('patient:update', {"elder_id": req.elder_id, "lat": req.latitude, "lng": req.longitude})
     return {"message": "Check-in logged and broadcasted"}
 
@@ -206,6 +309,173 @@ def query_analyzer(req: QueryAnalyzerReq):
         "results": [{"id": 1, "mock": "data"}]
     }
 
+# ==========================================
+# 5. PATIENT VIEW ENDPOINTS
+# ==========================================
+
+# --- Messages ---
+class SendMessageReq(BaseModel):
+    recipient: str
+    body: str
+    sender: str = "Patient"
+
+@app.post("/api/messages")
+def send_message(req: SendMessageReq, db: Session = Depends(get_db)):
+    msg = Message(sender=req.sender, recipient=req.recipient, body=req.body)
+    db.add(msg)
+    # Also create a notification for the confirmation
+    db.add(Notification(title=f"Message sent to {req.recipient}", body=req.body[:80]))
+    db.commit()
+    return {"success": True, "message_id": msg.message_id}
+
+@app.get("/api/messages")
+def get_messages(db: Session = Depends(get_db)):
+    msgs = db.query(Message).order_by(Message.timestamp.desc()).limit(50).all()
+    return [{"message_id": m.message_id, "sender": m.sender, "recipient": m.recipient, "body": m.body, "timestamp": m.timestamp.strftime("%b %d, %I:%M %p")} for m in msgs]
+
+# --- Medication Refills ---
+class RefillReq(BaseModel):
+    medication_name: str
+    pharmacy: str = "Apollo Pharmacy"
+
+@app.post("/api/refills")
+def request_refill(req: RefillReq, db: Session = Depends(get_db)):
+    refill = MedicationRefill(medication_name=req.medication_name, pharmacy=req.pharmacy)
+    db.add(refill)
+    db.add(Notification(title="Refill Requested", body=f"{req.medication_name} refill sent to {req.pharmacy}"))
+    db.commit()
+    return {"success": True, "refill_id": refill.refill_id, "status": "Pending"}
+
+@app.get("/api/refills")
+def get_refills(db: Session = Depends(get_db)):
+    refills = db.query(MedicationRefill).order_by(MedicationRefill.timestamp.desc()).all()
+    return [{"refill_id": r.refill_id, "medication_name": r.medication_name, "pharmacy": r.pharmacy, "status": r.status, "timestamp": r.timestamp.strftime("%b %d, %I:%M %p")} for r in refills]
+
+# --- Health Logs ---
+class HealthLogReq(BaseModel):
+    event_type: str
+    severity: str = "Info"
+    notes: str = ""
+
+@app.post("/api/health-logs")
+def log_health_event(req: HealthLogReq, db: Session = Depends(get_db)):
+    log = HealthLog(event_type=req.event_type, severity=req.severity, notes=req.notes)
+    db.add(log)
+    db.add(Notification(title=f"Health Event: {req.event_type}", body=req.notes or f"{req.event_type} logged successfully"))
+    db.commit()
+    return {"success": True, "log_id": log.log_id}
+
+@app.get("/api/health-logs")
+def get_health_logs(db: Session = Depends(get_db)):
+    logs = db.query(HealthLog).order_by(HealthLog.timestamp.desc()).limit(20).all()
+    return [{"log_id": l.log_id, "event_type": l.event_type, "severity": l.severity, "notes": l.notes, "timestamp": l.timestamp.strftime("%b %d, %I:%M %p")} for l in logs]
+
+# --- Notifications ---
+@app.get("/api/notifications")
+def get_notifications(db: Session = Depends(get_db)):
+    notifs = db.query(Notification).order_by(Notification.timestamp.desc()).limit(20).all()
+    return [{"notif_id": n.notif_id, "title": n.title, "body": n.body, "read": n.read, "timestamp": n.timestamp.strftime("%b %d, %I:%M %p")} for n in notifs]
+
+@app.post("/api/notifications/{id}/read")
+def mark_notification_read(id: int, db: Session = Depends(get_db)):
+    notif = db.query(Notification).filter(Notification.notif_id == id).first()
+    if notif:
+        notif.read = True
+        db.commit()
+    return {"success": True}
+
+@app.get("/api/notifications/count")
+def notification_count(db: Session = Depends(get_db)):
+    count = db.query(Notification).filter(Notification.read == False).count()
+    return {"unread": count}
+
+# --- Devices ---
+@app.get("/api/devices")
+def get_devices(db: Session = Depends(get_db)):
+    devices = db.query(Device).all()
+    return [{"device_id": d.device_id, "name": d.name, "device_type": d.device_type, "status": d.status, "battery": d.battery} for d in devices]
+
+class AddDeviceReq(BaseModel):
+    name: str
+    device_type: str
+
+@app.post("/api/devices")
+def add_device(req: AddDeviceReq, db: Session = Depends(get_db)):
+    dev = Device(name=req.name, device_type=req.device_type)
+    db.add(dev)
+    db.add(Notification(title="Device Added", body=f"{req.name} connected successfully"))
+    db.commit()
+    return {"success": True, "device_id": dev.device_id}
+
+@app.delete("/api/devices/{id}")
+def remove_device(id: int, db: Session = Depends(get_db)):
+    dev = db.query(Device).filter(Device.device_id == id).first()
+    if dev:
+        db.delete(dev)
+        db.commit()
+    return {"success": True}
+
+# --- Patient Profile ---
+@app.get("/api/profile")
+def get_profile(db: Session = Depends(get_db)):
+    p = db.query(PatientProfile).first()
+    if not p:
+        p = PatientProfile()
+        db.add(p)
+        db.commit()
+    return {"name": p.name, "email": p.email, "phone": p.phone, "dob": p.dob, "blood_group": p.blood_group, "address": p.address}
+
+class UpdateProfileReq(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    dob: Optional[str] = None
+    blood_group: Optional[str] = None
+    address: Optional[str] = None
+
+@app.put("/api/profile")
+def update_profile(req: UpdateProfileReq, db: Session = Depends(get_db)):
+    p = db.query(PatientProfile).first()
+    if not p:
+        p = PatientProfile()
+        db.add(p)
+    if req.name is not None: p.name = req.name
+    if req.email is not None: p.email = req.email
+    if req.phone is not None: p.phone = req.phone
+    if req.dob is not None: p.dob = req.dob
+    if req.blood_group is not None: p.blood_group = req.blood_group
+    if req.address is not None: p.address = req.address
+    db.commit()
+    return {"success": True}
+
+# --- Consultations ---
+@app.get("/api/consultations")
+def get_consultations(db: Session = Depends(get_db)):
+    consults = db.query(Consultation).order_by(Consultation.timestamp.desc()).all()
+    return [{"consult_id": c.consult_id, "doctor_name": c.doctor_name, "specialty": c.specialty, "scheduled_at": c.scheduled_at, "status": c.status, "notes": c.notes} for c in consults]
+
+class BookConsultReq(BaseModel):
+    doctor_name: str
+    specialty: str = "General"
+    scheduled_at: str
+
+@app.post("/api/consultations")
+def book_consultation(req: BookConsultReq, db: Session = Depends(get_db)):
+    c = Consultation(doctor_name=req.doctor_name, specialty=req.specialty, scheduled_at=req.scheduled_at)
+    db.add(c)
+    db.add(Notification(title="Consultation Booked", body=f"Appointment with {req.doctor_name} on {req.scheduled_at}"))
+    db.commit()
+    return {"success": True, "consult_id": c.consult_id}
+
+@app.put("/api/consultations/{id}/reschedule")
+def reschedule_consultation(id: int, req: BookConsultReq, db: Session = Depends(get_db)):
+    c = db.query(Consultation).filter(Consultation.consult_id == id).first()
+    if c:
+        c.scheduled_at = req.scheduled_at
+        db.commit()
+    return {"success": True}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:socket_app", host="127.0.0.1", port=5000, reload=True)
+
