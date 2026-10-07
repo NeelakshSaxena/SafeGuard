@@ -8,4 +8,6 @@ pyjwt
 slowapi
 passlib
 pytest
+pytest
 pytest-asyncio
+python-socketio

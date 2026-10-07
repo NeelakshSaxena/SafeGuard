@@ -74,9 +74,9 @@ The backend uses Python and a local SQLite database for rapid development.
    ```
 4. Start the backend server:
    ```powershell
-   uvicorn main:app --reload --port 5000
+   uvicorn main:socket_app --reload --port 5000
    ```
-*(Note: On the first boot, the system will automatically generate a fresh SQLite database and populate it with 55 synthetic profiles for testing).*
+*(Note: Ensure your `.env` file is properly configured with your DATABASE_URL if using PostgreSQL. Otherwise, it defaults to a local SQLite database).*
 
 ### 2. Run the Frontend Dashboard
 We provide two frontend versions: the modern React app and the classic vanilla HTML/JS version.

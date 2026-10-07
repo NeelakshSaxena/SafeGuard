@@ -1,49 +1,49 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { RoleProvider, useRole } from './context/RoleContext';
-import MainLayout from './components/layout/MainLayout';
-import Dashboard from './pages/Dashboard';
-import Alerts from './pages/Alerts';
-import Analytics from './pages/Analytics';
-import LiveLocation from './pages/LiveLocation';
-import DBViz from './pages/DBViz';
-import Clinical from './pages/Clinical';
-import ElderlyApp from './pages/ElderlyApp';
-import Telehealth from './pages/Telehealth';
-import Records from './pages/Records';
-import Prescriptions from './pages/Prescriptions';
-import Wearables from './pages/Wearables';
-import Placeholder from './pages/Placeholder';
-import './index.css';
-
-const HomeRoute = () => {
-  const { role } = useRole();
-  if (role === 'caregiver') return <Dashboard />;
-  if (role === 'doctor') return <Clinical />;
-  if (role === 'elderly') return <ElderlyApp />;
-  return <Navigate to="/alerts" />;
-};
+import { useEffect, useRef } from 'react';
+import { useStore } from './store';
+import { initSocket, socket } from './services/socket';
 
 function App() {
+  const { setOfflineStatus } = useStore();
+  const iframeRef = useRef(null);
+
+  useEffect(() => {
+    // Keep the WebSockets and state management running in the React Background
+    initSocket();
+    
+    const handleOnline = () => setOfflineStatus(false);
+    const handleOffline = () => setOfflineStatus(true);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Forward socket events to the legacy UI
+    const handlePatientUpdate = (data) => {
+      if (iframeRef.current && iframeRef.current.contentWindow) {
+        iframeRef.current.contentWindow.postMessage({ type: 'PATIENT_UPDATE', payload: data }, '*');
+      }
+    };
+    
+    socket.on('patient:update', handlePatientUpdate);
+
+    return () => {
+      socket.off('patient:update', handlePatientUpdate);
+      socket.disconnect();
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [setOfflineStatus]);
+
+  // Instantly restore 100% of the legacy vanilla JS functionality 
+  // by mounting it inside the React app, allowing a gradual component-by-component migration
   return (
-    <RoleProvider>
-      <Router>
-        <Routes>
-          <Route path="/" element={<MainLayout />}>
-            <Route index element={<HomeRoute />} />
-            <Route path="alerts" element={<Alerts />} />
-            <Route path="analytics" element={<Analytics />} />
-            <Route path="location" element={<LiveLocation />} />
-            <Route path="dbviz" element={<DBViz />} />
-            <Route path="telehealth" element={<Telehealth />} />
-            <Route path="records" element={<Records />} />
-            <Route path="prescriptions" element={<Prescriptions />} />
-            <Route path="wearables" element={<Wearables />} />
-            <Route path="*" element={<Placeholder title="Not Found" />} />
-          </Route>
-        </Routes>
-      </Router>
-    </RoleProvider>
+    <div className="w-screen h-screen overflow-hidden m-0 p-0">
+      <iframe 
+        ref={iframeRef}
+        src="/legacy/index.html" 
+        className="w-full h-full border-none m-0 p-0 block"
+        title="SafeGuard Legacy Dashboard"
+      />
+    </div>
   );
 }
 
