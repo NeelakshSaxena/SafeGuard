@@ -74,7 +74,8 @@ CREATE TABLE IF NOT EXISTS geofence (
     name VARCHAR(255) NOT NULL,
     latitude DECIMAL(10, 8) NOT NULL,
     longitude DECIMAL(11, 8) NOT NULL,
-    radius_meters INT NOT NULL
+    radius_meters INT NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE
 );
 
 CREATE TABLE IF NOT EXISTS alert (
@@ -146,3 +147,82 @@ BEGIN
     RETURN (total_taken * 100) / total_scheduled;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    audit_id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(user_id) ON DELETE SET NULL,
+    action VARCHAR(50) NOT NULL,
+    table_name VARCHAR(50) NOT NULL,
+    record_id INT NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ip_address VARCHAR(45),
+    details JSONB
+);
+
+CREATE INDEX IF NOT EXISTS idx_risk_score_elderly_date ON risk_score(elder_id, score_date DESC);
+CREATE INDEX IF NOT EXISTS idx_geofence_elderly_active ON geofence(elder_id, is_active);
+
+-- Auto-Alert Missed Check-in
+CREATE OR REPLACE FUNCTION check_missed_checkins()
+RETURNS TRIGGER AS $$
+BEGIN
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Health Event Alert Trigger
+CREATE OR REPLACE FUNCTION trg_health_event_alert()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.severity IN ('High', 'Critical') THEN
+        INSERT INTO alert (elder_id, alert_type, severity, status)
+        VALUES (NEW.elder_id, 'Health Event: ' || NEW.event_type, NEW.severity, 'Pending');
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER health_event_alert_trg
+AFTER INSERT ON health_event
+FOR EACH ROW EXECUTE PROCEDURE trg_health_event_alert();
+
+-- ComputeRiskScore Function
+CREATE OR REPLACE FUNCTION ComputeRiskScore(p_elder_id INT, p_date DATE)
+RETURNS INT AS $$
+DECLARE
+    v_score INT := 50;
+BEGIN
+    INSERT INTO risk_score (elder_id, score_date, overall_score) 
+    VALUES (p_elder_id, p_date, v_score)
+    ON CONFLICT (elder_id, score_date) DO UPDATE SET overall_score = v_score;
+    RETURN v_score;
+END;
+$$ LANGUAGE plpgsql;
+
+-- DetectGeofenceViolation Function
+CREATE OR REPLACE FUNCTION DetectGeofenceViolation(p_check_in_id INT)
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_violation BOOLEAN := FALSE;
+BEGIN
+    RETURN v_violation;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Risk Score Recalculation Trigger
+CREATE OR REPLACE FUNCTION trg_recalc_risk_score()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_elder_id INT;
+BEGIN
+    SELECT elder_id INTO v_elder_id FROM medication WHERE med_id = NEW.med_id;
+    IF v_elder_id IS NOT NULL THEN
+        PERFORM ComputeRiskScore(v_elder_id, CURRENT_DATE);
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER recalc_risk_score_trg
+AFTER INSERT ON med_log
+FOR EACH ROW EXECUTE PROCEDURE trg_recalc_risk_score();

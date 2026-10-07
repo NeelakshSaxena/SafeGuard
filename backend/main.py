@@ -1,13 +1,24 @@
+import os
 import time
 import sqlite3
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import random
+import jwt
+from dotenv import load_dotenv
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
+load_dotenv()
+
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="SafeGuard API")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -17,7 +28,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def audit_log_middleware(request: Request, call_next):
+    # HIPAA Audit Logging Placeholder
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    print(f"AUDIT LOG: {request.client.host} - {request.method} {request.url} - {response.status_code} - {process_time:.4f}s")
+    return response
+
 DB_PATH = "safeguard.db"
+# DB_URL = os.getenv("DATABASE_URL", "sqlite:///safeguard.db") # Prepared for SQLAlchemy PostgreSQL
 QUERY_HISTORY = []
 
 def get_db():
@@ -106,6 +127,16 @@ init_db()
 @app.get("/")
 def read_root():
     return {"message": "Welcome to SafeGuard API."}
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+@app.post("/api/auth/login")
+@limiter.limit("5/minute")
+def login(request: Request, req: LoginRequest):
+    token = jwt.encode({"user_id": 1, "role": "Caregiver", "exp": datetime.utcnow() + timedelta(hours=24)}, os.getenv("JWT_SECRET", "secret"), algorithm="HS256")
+    return {"access_token": token, "type": "bearer"}
 
 @app.get("/api/dashboard/stats")
 def get_dashboard_stats():

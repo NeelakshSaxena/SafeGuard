@@ -2,3 +2,10 @@ fastapi
 uvicorn
 sqlalchemy
 pydantic
+python-dotenv
+psycopg2-binary
+pyjwt
+slowapi
+passlib
+pytest
+pytest-asyncio
