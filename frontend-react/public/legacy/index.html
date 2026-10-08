@@ -345,13 +345,13 @@
             <div id="alerts" class="tab-content">
                 <div class="d-flex justify-between align-center mb-2">
                     <h2><i class="fa-solid fa-triangle-exclamation"></i> Alert Management Center</h2>
-                    <button class="btn btn-outline"><i class="fa-solid fa-check-double"></i> Acknowledge All</button>
+                    <button class="btn btn-outline" onclick="ackAllAlerts()"><i class="fa-solid fa-check-double"></i> Acknowledge All</button>
                 </div>
                 
-                <div class="filter-bar">
-                    <button class="chip active">Pending</button>
-                    <button class="chip">Acknowledged</button>
-                    <button class="chip">Resolved</button>
+                <div class="filter-bar" id="alertsFilterBar">
+                    <button class="chip active" onclick="setAlertFilter('Pending')">Pending</button>
+                    <button class="chip" onclick="setAlertFilter('Resolved')">Resolved</button>
+                    <button class="chip" onclick="setAlertFilter('All')">All</button>
                 </div>
                 
                 <div class="card" style="padding: 0;">
@@ -682,7 +682,12 @@
             <div id="live-location" class="tab-content">
                 <div class="d-flex justify-between align-center mb-2">
                     <h2><i class="fa-solid fa-map-location-dot"></i> Live Location Tracking</h2>
-                    <button class="btn btn-outline"><i class="fa-solid fa-gear"></i> Geofence Settings</button>
+                    <div>
+                        <select id="locationPatientSelect" class="search-bar" style="display:none; margin-right:1rem; border-radius:0.5rem;" onchange="renderLiveLocation(this.value)">
+                            <option value="">Select Patient...</option>
+                        </select>
+                        <button class="btn btn-outline" onclick="showToast('Geofence Settings opened. You can now define safe boundaries.', 'success')"><i class="fa-solid fa-gear"></i> Geofence Settings</button>
+                    </div>
                 </div>
                 <div class="grid-2">
                     <div class="card" style="padding: 0; overflow: hidden; min-height: 400px; background: #2a3a4c; display: flex; align-items: center; justify-content: center; position: relative;">
@@ -690,35 +695,20 @@
                         <div style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.5); padding: 0.5rem; border-radius: 0.25rem; font-size: 0.8rem;">
                             <i class="fa-solid fa-satellite-dish text-success"></i> GPS Active
                         </div>
-                        <div style="text-align: center;">
-                            <div style="width: 200px; height: 200px; border-radius: 50%; border: 2px dashed var(--success); background: rgba(16,185,129,0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto; position: relative;">
-                                <i class="fa-solid fa-house" style="position: absolute; top: 20px; color: var(--success); font-size: 1.5rem;"></i>
-                                <div style="width: 15px; height: 15px; background: var(--primary); border-radius: 50%; border: 2px solid white; box-shadow: 0 0 10px var(--primary); position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);"></div>
-                            </div>
-                            <p class="mt-2" style="margin-top: 1rem; font-weight: bold;">📍 Safe Zone: Home</p>
+                        <div style="text-align: center;" id="locationMapContent">
+                            <p class="text-muted">Select a patient to view location.</p>
                         </div>
                     </div>
                     <div class="card">
                         <h3 class="mb-1 text-primary">Location History & Geofencing</h3>
                         <div style="background: var(--bg); padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border); margin-bottom: 1rem;">
                             <h4 style="margin: 0 0 0.5rem 0;">Current Status</h4>
-                            <p class="text-success" style="margin: 0; font-size: 1.1rem;"><i class="fa-solid fa-check-circle"></i> At Home</p>
-                            <p class="text-muted" style="font-size: 0.85rem; margin-top: 0.25rem;">Last updated: Just now | Accuracy: 20m</p>
+                            <p class="text-success" style="margin: 0; font-size: 1.1rem;" id="locationCurrentStatus"><i class="fa-solid fa-circle-question"></i> Unknown</p>
+                            <p class="text-muted" style="font-size: 0.85rem; margin-top: 0.25rem;" id="locationLastUpdated">Last updated: -</p>
                         </div>
                         <h4 style="margin: 1.5rem 0 0.5rem 0; font-size: 0.9rem;">Events (Last 24h)</h4>
-                        <div style="border-left: 2px solid var(--border); margin-left: 0.5rem; padding-left: 1rem;">
-                            <div style="position: relative; margin-bottom: 1rem;">
-                                <div style="position: absolute; left: -1.4rem; top: 0.25rem; width: 10px; height: 10px; background: var(--success); border-radius: 50%;"></div>
-                                <p style="margin: 0; font-size: 0.9rem;">11:00 AM - Returned home</p>
-                            </div>
-                            <div style="position: relative; margin-bottom: 1rem;">
-                                <div style="position: absolute; left: -1.4rem; top: 0.25rem; width: 10px; height: 10px; background: var(--text-muted); border-radius: 50%;"></div>
-                                <p style="margin: 0; font-size: 0.9rem;">10:45 AM - Exited pharmacy</p>
-                            </div>
-                            <div style="position: relative; margin-bottom: 1rem;">
-                                <div style="position: absolute; left: -1.4rem; top: 0.25rem; width: 10px; height: 10px; background: var(--primary); border-radius: 50%;"></div>
-                                <p style="margin: 0; font-size: 0.9rem;">10:15 AM - Entered pharmacy</p>
-                            </div>
+                        <div style="border-left: 2px solid var(--border); margin-left: 0.5rem; padding-left: 1rem;" id="locationEventsList">
+                            <p class="text-muted" style="font-size:0.85rem;">No recent events.</p>
                         </div>
                     </div>
                 </div>
@@ -728,36 +718,10 @@
             <div id="facilities" class="tab-content">
                 <div class="d-flex justify-between align-center mb-2">
                     <h2><i class="fa-solid fa-building-user"></i> Network Facilities</h2>
-                    <button class="btn btn-primary"><i class="fa-solid fa-plus"></i> Add Facility</button>
+                    <button class="btn btn-primary" onclick="addFacility()"><i class="fa-solid fa-plus"></i> Add Facility</button>
                 </div>
-                <div class="grid-3">
-                    <div class="card" style="border-top: 4px solid var(--primary);">
-                        <h3 class="mb-1">Apollo Care - Delhi</h3>
-                        <p class="text-success" style="font-size: 0.85rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-circle-check"></i> Active (85 elderly)</p>
-                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Manager: Priya Kumar</p>
-                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Staff:</span> <span>15 (3 Docs, 8 Nurses)</span></div>
-                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Alerts Today:</span> <span class="text-danger">3 pending</span></div>
-                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;"><span>Avg Response:</span> <span>12 mins</span></div>
-                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">Manage Facility</button>
-                    </div>
-                    <div class="card" style="border-top: 4px solid var(--primary);">
-                        <h3 class="mb-1">Apollo Care - Mumbai</h3>
-                        <p class="text-success" style="font-size: 0.85rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-circle-check"></i> Active (65 elderly)</p>
-                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Manager: Raj Singh</p>
-                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Staff:</span> <span>12 (2 Docs, 6 Nurses)</span></div>
-                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Alerts Today:</span> <span class="text-warning">1 pending</span></div>
-                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;"><span>Avg Response:</span> <span>9 mins</span></div>
-                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">Manage Facility</button>
-                    </div>
-                    <div class="card" style="border-top: 4px solid var(--primary);">
-                        <h3 class="mb-1">Apollo Care - Bangalore</h3>
-                        <p class="text-success" style="font-size: 0.85rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-circle-check"></i> Active (30 elderly)</p>
-                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Manager: Anita Desai</p>
-                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Staff:</span> <span>8 (1 Doc, 4 Nurses)</span></div>
-                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Alerts Today:</span> <span class="text-success">0 pending</span></div>
-                        <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;"><span>Avg Response:</span> <span>8 mins</span></div>
-                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">Manage Facility</button>
-                    </div>
+                <div class="grid-3" id="facilitiesContainer">
+                    <!-- Populated by JS -->
                 </div>
             </div>
 
@@ -814,23 +778,23 @@
                         <h3 class="mb-1 text-primary">Brand Customization (White-Label)</h3>
                         <div style="margin-bottom: 1rem;">
                             <label class="text-muted" style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Organization Name</label>
-                            <input type="text" value="Apollo Senior Care" style="width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text-main); padding: 0.5rem; border-radius: 0.25rem;">
+                            <input type="text" id="orgNameInput" value="SafeGuard Health" style="width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text-main); padding: 0.5rem; border-radius: 0.25rem;">
                         </div>
                         <div class="d-flex gap-1 mb-1">
                             <div style="flex:1;">
                                 <label class="text-muted" style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Primary Color</label>
-                                <input type="color" value="#4F46E5" style="width: 100%; height: 40px; border: none; background: transparent; cursor: pointer;">
+                                <input type="color" id="primaryColorInput" value="#6366f1" style="width: 100%; height: 40px; border: none; background: transparent; cursor: pointer;">
                             </div>
                             <div style="flex:1;">
-                                <label class="text-muted" style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Secondary Color</label>
-                                <input type="color" value="#10B981" style="width: 100%; height: 40px; border: none; background: transparent; cursor: pointer;">
+                                <label class="text-muted" style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Secondary Color (Success)</label>
+                                <input type="color" id="secondaryColorInput" value="#10B981" style="width: 100%; height: 40px; border: none; background: transparent; cursor: pointer;">
                             </div>
                         </div>
                         <div style="margin-bottom: 1rem;">
                             <label class="text-muted" style="font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Custom Portal URL</label>
-                            <input type="text" value="apollo.safeguard.health" style="width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text-main); padding: 0.5rem; border-radius: 0.25rem;">
+                            <input type="text" id="orgUrlInput" value="safeguard.health" style="width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text-main); padding: 0.5rem; border-radius: 0.25rem;">
                         </div>
-                        <button class="btn btn-primary w-100" style="width: 100%; justify-content: center;">Save Brand Settings</button>
+                        <button class="btn btn-primary w-100" id="saveBrandBtn" style="width: 100%; justify-content: center;" onclick="saveBrandSettings(this)">Save Brand Settings</button>
                     </div>
                     <div class="card">
                         <h3 class="mb-1 text-primary">Staff & Subscription (Premium Tier)</h3>
@@ -844,7 +808,7 @@
                             <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span>Wearable Integration</span> <span class="text-success">Enabled</span></li>
                             <li style="margin-bottom: 0.5rem; display: flex; justify-content: space-between;"><span>API Access</span> <span class="text-danger">Not in plan</span></li>
                         </ul>
-                        <button class="btn btn-outline w-100" style="width: 100%; justify-content: center;">Upgrade Plan</button>
+                        <button class="btn btn-outline w-100" style="width: 100%; justify-content: center;" onclick="handleAction(this, 'Plan Upgraded', 'Enterprise Plan Activated', 'success')">Upgrade Plan</button>
                     </div>
                 </div>
             </div>

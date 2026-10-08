@@ -105,6 +105,9 @@ function switchTab(tabId) {
     if (tabId === 'analytics') fetchAnalytics();
     if (tabId === 'dbviz') fetchDbStats();
     if (tabId === 'clinical') fetchClinicalData();
+    if (tabId === 'ai-insights') fetchAiInsights();
+    if (tabId === 'live-location') loadLiveLocation();
+    if (tabId === 'facilities') loadFacilities();
     // Telehealth - role-aware
     if (tabId === 'telehealth') {
         const doctorView = document.getElementById('telehealthDoctorView');
@@ -276,39 +279,96 @@ async function fetchElderlyCards() {
     } catch (e) { console.error(e); }
 }
 
+let currentAlertFilter = 'Pending';
+let globalAlertsData = [];
+
 async function fetchAlerts() {
     try {
-        const res = await fetch(`${API_BASE}/alerts`);
-        const alerts = await res.json();
-        const tbody = document.getElementById('alertsTableBody');
-        tbody.innerHTML = '';
-        
-        alerts.forEach(a => {
-            const color = a.severity === 'Critical' ? 'var(--danger)' : 'var(--warning)';
-            const statusColor = a.status === 'Pending' ? 'var(--danger)' : 'var(--success)';
-            
-            const encoded = encodeURIComponent(JSON.stringify(a));
-            const actionBtn = a.status === 'Pending' 
-                ? `<button class="btn btn-outline btn-sm" onclick="openAlertModal('${encoded}')">Details</button> <button class="btn btn-success btn-sm" onclick="ackAlert(${a.alert_id})">Ack</button>` 
-                : `<span class="text-muted"><i class="fa-solid fa-check"></i> Resolved</span>`;
-            
-            tbody.innerHTML += `
-                <tr>
-                    <td style="color: ${color}; font-weight: bold;"><i class="fa-solid fa-circle" style="font-size:0.5rem; margin-right:0.5rem;"></i>${a.severity}</td>
-                    <td>${a.alert_type}</td>
-                    <td style="font-weight: 500;">${a.elderly_name}</td>
-                    <td class="text-muted">${a.timestamp.split(' ')[1]}</td>
-                    <td style="color: ${statusColor}; font-weight: 500;">${a.status}</td>
-                    <td>${actionBtn}</td>
-                </tr>
-            `;
-        });
+        let url = `${API_BASE}/alerts`;
+        if (currentRole === 'doctor') {
+            url += `?doctor_id=${currentUserId}`;
+        }
+        const res = await fetch(url);
+        globalAlertsData = await res.json();
+        renderAlertsTable();
     } catch (e) { console.error(e); }
+}
+
+function setAlertFilter(filter) {
+    currentAlertFilter = filter;
+    const chips = document.querySelectorAll('#alertsFilterBar .chip');
+    chips.forEach(c => c.classList.remove('active'));
+    
+    // Find the chip with matching text and make it active
+    Array.from(chips).forEach(c => {
+        if (c.innerText === filter) {
+            c.classList.add('active');
+        }
+    });
+    renderAlertsTable();
+}
+
+function renderAlertsTable() {
+    const tbody = document.getElementById('alertsTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    let filteredAlerts = globalAlertsData;
+    if (currentAlertFilter !== 'All') {
+        filteredAlerts = globalAlertsData.filter(a => a.status === currentAlertFilter);
+    }
+    
+    if (filteredAlerts.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-muted" style="text-align:center;padding:2rem;">No ${currentAlertFilter.toLowerCase()} alerts.</td></tr>`;
+        return;
+    }
+    
+    filteredAlerts.forEach(a => {
+        const color = a.severity === 'Critical' ? 'var(--danger)' : 'var(--warning)';
+        const statusColor = a.status === 'Pending' ? 'var(--danger)' : 'var(--success)';
+        
+        const encoded = encodeURIComponent(JSON.stringify(a));
+        const actionBtn = a.status === 'Pending' 
+            ? `<button class="btn btn-outline btn-sm" onclick="openAlertModal('${encoded}')">Details</button> <button class="btn btn-success btn-sm" onclick="ackAlert(${a.alert_id})">Ack</button>` 
+            : `<span class="text-muted"><i class="fa-solid fa-check"></i> Resolved</span>`;
+        
+        // Handle split gracefully in case timestamp doesn't have a space
+        const timeStr = a.timestamp.includes(' ') ? a.timestamp.split(' ')[1] : a.timestamp;
+        
+        tbody.innerHTML += `
+            <tr>
+                <td style="color: ${color}; font-weight: bold;"><i class="fa-solid fa-circle" style="font-size:0.5rem; margin-right:0.5rem;"></i>${a.severity}</td>
+                <td>${a.alert_type}</td>
+                <td style="font-weight: 500;">${a.elderly_name}</td>
+                <td class="text-muted">${timeStr}</td>
+                <td style="color: ${statusColor}; font-weight: 500;">${a.status}</td>
+                <td>${actionBtn}</td>
+            </tr>
+        `;
+    });
 }
 
 async function ackAlert(id) {
     try {
         await fetch(`${API_BASE}/alerts/${id}/acknowledge`, {method: 'POST'});
+        showToast('Alert acknowledged', 'success');
+        fetchAlerts();
+        fetchDashboardStats();
+    } catch (e) { console.error(e); }
+}
+
+async function ackAllAlerts() {
+    try {
+        const pendingAlerts = globalAlertsData.filter(a => a.status === 'Pending');
+        if (pendingAlerts.length === 0) {
+            showToast('No pending alerts to acknowledge', 'success');
+            return;
+        }
+        
+        for (const alert of pendingAlerts) {
+            await fetch(`${API_BASE}/alerts/${alert.alert_id}/acknowledge`, {method: 'POST'});
+        }
+        showToast('All alerts acknowledged', 'success');
         fetchAlerts();
         fetchDashboardStats();
     } catch (e) { console.error(e); }
@@ -319,7 +379,11 @@ let charts = {};
 
 async function fetchAnalytics() {
     try {
-        const res = await fetch(`${API_BASE}/analytics/mock`);
+        let url = `${API_BASE}/analytics/mock`;
+        if (currentRole === 'doctor') {
+            url += `?doctor_id=${currentUserId}`;
+        }
+        const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
         
@@ -347,7 +411,7 @@ async function fetchAnalytics() {
         if (charts.adherence) charts.adherence.destroy();
         charts.adherence = new Chart(c3, {
             type: 'doughnut',
-            data: { labels: ['>90% (Safe)', '75-90% (Warning)', '<75% (Critical)'], datasets: [{ data: [25, 15, 10], backgroundColor: ['#10B981', '#F59E0B', '#EF4444'], borderWidth: 0 }] },
+            data: { labels: ['>90% (Safe)', '75-90% (Warning)', '<75% (Critical)'], datasets: [{ data: data.adherence, backgroundColor: ['#10B981', '#F59E0B', '#EF4444'], borderWidth: 0 }] },
             options: { responsive: true, cutout: '70%', plugins: { legend: { position: 'right', labels: { color: '#94A3B8' } } } }
         });
         
@@ -355,7 +419,7 @@ async function fetchAnalytics() {
         if (charts.heatmap) charts.heatmap.destroy();
         charts.heatmap = new Chart(c4, {
             type: 'line',
-            data: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], datasets: [{ label: 'Alert Frequency', data: [2, 5, 1, 8, 3, 2, 0], borderColor: '#EF4444', backgroundColor: 'rgba(239, 68, 68, 0.2)', fill: true, stepped: true }] },
+            data: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], datasets: [{ label: 'Alert Frequency', data: data.alerts_heatmap, borderColor: '#EF4444', backgroundColor: 'rgba(239, 68, 68, 0.2)', fill: true, stepped: true }] },
             options: { responsive: true, plugins: { legend: { display: false } } }
         });
         
@@ -367,6 +431,153 @@ async function fetchAnalytics() {
         const container = document.getElementById('complianceChart').parentElement;
         container.appendChild(errorBox);
     }
+}
+
+async function fetchAiInsights() {
+    try {
+        let url = `${API_BASE}/ai-insights`;
+        if (currentRole === 'doctor') {
+            url += `?doctor_id=${currentUserId}`;
+        }
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        const aiContainer = document.querySelector('#ai-insights .grid-2');
+        if (!aiContainer) return;
+        
+        aiContainer.innerHTML = '';
+        if (data.predictions.length === 0) {
+            aiContainer.innerHTML = '<div class="card"><p class="text-muted">No high-risk predictions found for your patients.</p></div>';
+        } else {
+            data.predictions.forEach(p => {
+                const border = p.severity === 'danger' ? 'var(--danger)' : 'var(--warning)';
+                const textColor = p.severity === 'danger' ? 'text-danger' : 'text-warning';
+                const bg = p.severity === 'danger' ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)';
+                
+                aiContainer.innerHTML += `
+                    <div class="card" style="border-top: 4px solid ${border};">
+                        <h3 class="mb-1">${p.type}</h3>
+                        <p class="${textColor}" style="font-size: 2rem; font-weight: bold; margin: 0;">${p.percentage} <span style="font-size: 1rem; font-weight: normal;" class="text-muted">${p.patient}</span></p>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Based on: ${p.reason}</p>
+                        <div style="background: ${bg}; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                            <h4 class="${textColor}" style="margin: 0 0 0.5rem 0;">Recommendation</h4>
+                            <p style="margin: 0; font-size: 0.9rem;">${p.recommendation}</p>
+                        </div>
+                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">Review Details</button>
+                    </div>
+                `;
+            });
+        }
+        
+        const anomalyTable = document.querySelector('#ai-insights table');
+        if (anomalyTable) {
+            anomalyTable.innerHTML = '';
+            if (data.anomalies.length === 0) {
+                anomalyTable.innerHTML = '<tr><td class="text-muted" style="padding:1rem 0;">No active anomalies detected.</td></tr>';
+            } else {
+                data.anomalies.forEach(a => {
+                    const icon = a.type.includes('Cardiac') ? 'fa-heart-crack' : 'fa-bed';
+                    const textColor = a.severity === 'danger' ? 'text-danger' : 'text-warning';
+                    const btnClass = a.severity === 'danger' ? 'btn-danger' : 'btn-outline';
+                    
+                    anomalyTable.innerHTML += `
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 1rem 0;"><span class="${textColor}"><i class="fa-solid ${icon}"></i> ${a.type}</span></td>
+                            <td class="text-muted">${a.description}</td>
+                            <td><button class="btn btn-sm ${btnClass}">${a.action}</button></td>
+                        </tr>
+                    `;
+                });
+            }
+        }
+        
+    } catch (e) {
+        console.error("AI Insights Error:", e);
+    }
+}
+
+// --- Live Location ---
+async function loadLiveLocation() {
+    const patientSelect = document.getElementById('locationPatientSelect');
+    if (!patientSelect) return;
+    
+    if (currentRole === 'doctor') {
+        patientSelect.style.display = 'block';
+        try {
+            const res = await fetch(`${API_BASE}/elderly?doctor_id=${currentUserId}`);
+            const patients = await res.json();
+            
+            // Populate select dropdown
+            patientSelect.innerHTML = '<option value="">Select Patient...</option>';
+            patients.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.elder_id;
+                opt.innerText = p.name;
+                patientSelect.appendChild(opt);
+            });
+            
+            // Clear default view
+            renderLiveLocation('');
+        } catch(e) { console.error("Error loading location patients", e); }
+    } else {
+        patientSelect.style.display = 'none';
+        renderLiveLocation('self'); // Mock self data for patient/caregiver
+    }
+}
+
+function renderLiveLocation(patientId) {
+    const mapContent = document.getElementById('locationMapContent');
+    const currentStatus = document.getElementById('locationCurrentStatus');
+    const lastUpdated = document.getElementById('locationLastUpdated');
+    const eventsList = document.getElementById('locationEventsList');
+    
+    if (!patientId) {
+        mapContent.innerHTML = '<p class="text-muted">Select a patient to view location.</p>';
+        currentStatus.innerHTML = '<i class="fa-solid fa-circle-question"></i> Unknown';
+        currentStatus.className = 'text-muted';
+        lastUpdated.innerText = 'Last updated: -';
+        eventsList.innerHTML = '<p class="text-muted" style="font-size:0.85rem;">No recent events.</p>';
+        return;
+    }
+    
+    // In a real app we'd fetch location data by patientId. 
+    // Here we generate dynamic mock data based on the ID.
+    const isHome = patientId % 2 === 0 || patientId === 'self';
+    
+    mapContent.innerHTML = `
+        <div style="width: 200px; height: 200px; border-radius: 50%; border: 2px dashed ${isHome ? 'var(--success)' : 'var(--warning)'}; background: ${isHome ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)'}; display: flex; align-items: center; justify-content: center; margin: 0 auto; position: relative;">
+            <i class="fa-solid ${isHome ? 'fa-house' : 'fa-building-columns'}" style="position: absolute; top: 20px; color: ${isHome ? 'var(--success)' : 'var(--warning)'}; font-size: 1.5rem;"></i>
+            <div style="width: 15px; height: 15px; background: var(--primary); border-radius: 50%; border: 2px solid white; box-shadow: 0 0 10px var(--primary); position: absolute; top: 50%; left: ${isHome ? '50%' : '60%'}; transform: translate(-50%, -50%);"></div>
+        </div>
+        <p class="mt-2" style="margin-top: 1rem; font-weight: bold;">📍 Safe Zone: ${isHome ? 'Home' : 'Community Center'}</p>
+    `;
+    
+    currentStatus.innerHTML = isHome 
+        ? '<i class="fa-solid fa-check-circle"></i> At Home'
+        : '<i class="fa-solid fa-person-walking"></i> In Transit / Away';
+    currentStatus.className = isHome ? 'text-success' : 'text-warning';
+    
+    lastUpdated.innerText = `Last updated: Just now | Accuracy: ${isHome ? '15m' : '35m'}`;
+    
+    eventsList.innerHTML = isHome ? `
+        <div style="position: relative; margin-bottom: 1rem;">
+            <div style="position: absolute; left: -1.4rem; top: 0.25rem; width: 10px; height: 10px; background: var(--success); border-radius: 50%;"></div>
+            <p style="margin: 0; font-size: 0.9rem;">11:00 AM - Returned home</p>
+        </div>
+        <div style="position: relative; margin-bottom: 1rem;">
+            <div style="position: absolute; left: -1.4rem; top: 0.25rem; width: 10px; height: 10px; background: var(--text-muted); border-radius: 50%;"></div>
+            <p style="margin: 0; font-size: 0.9rem;">10:45 AM - Exited pharmacy</p>
+        </div>
+    ` : `
+        <div style="position: relative; margin-bottom: 1rem;">
+            <div style="position: absolute; left: -1.4rem; top: 0.25rem; width: 10px; height: 10px; background: var(--warning); border-radius: 50%;"></div>
+            <p style="margin: 0; font-size: 0.9rem;">12:30 PM - Arrived at Community Center</p>
+        </div>
+        <div style="position: relative; margin-bottom: 1rem;">
+            <div style="position: absolute; left: -1.4rem; top: 0.25rem; width: 10px; height: 10px; background: var(--text-muted); border-radius: 50%;"></div>
+            <p style="margin: 0; font-size: 0.9rem;">12:00 PM - Left home</p>
+        </div>
+    `;
 }
 
 // --- Doctor Clinical View ---
@@ -1389,3 +1600,74 @@ document.addEventListener('mouseup', () => {
         currentModalContent = null;
     }
 });
+
+// --- Enterprise Settings (Facilities & Org) ---
+let globalFacilities = [
+    { id: 1, name: "Apollo Care - Delhi", status: "Active", patients: 85, manager: "Priya Kumar", docs: 3, nurses: 8, alerts: 3, response: "12 mins" },
+    { id: 2, name: "Apollo Care - Mumbai", status: "Active", patients: 65, manager: "Raj Singh", docs: 2, nurses: 6, alerts: 1, response: "9 mins" },
+    { id: 3, name: "Apollo Care - Bangalore", status: "Active", patients: 30, manager: "Anita Desai", docs: 1, nurses: 4, alerts: 0, response: "8 mins" }
+];
+
+function loadFacilities() {
+    const container = document.getElementById('facilitiesContainer');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    globalFacilities.forEach(f => {
+        const alertClass = f.alerts > 0 ? (f.alerts > 2 ? 'text-danger' : 'text-warning') : 'text-success';
+        
+        container.innerHTML += `
+            <div class="card" style="border-top: 4px solid var(--primary);">
+                <h3 class="mb-1">${f.name}</h3>
+                <p class="text-success" style="font-size: 0.85rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-circle-check"></i> ${f.status} (${f.patients} elderly)</p>
+                <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Manager: ${f.manager}</p>
+                <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Staff:</span> <span>${f.docs + f.nurses} (${f.docs} Docs, ${f.nurses} Nurses)</span></div>
+                <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Alerts Today:</span> <span class="${alertClass}">${f.alerts} pending</span></div>
+                <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;"><span>Avg Response:</span> <span>${f.response}</span></div>
+                <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;" onclick="showToast('Loading dashboard for ${f.name}...', 'success')">Manage Facility</button>
+            </div>
+        `;
+    });
+}
+
+function addFacility() {
+    const name = prompt("Enter Facility Name:");
+    if (!name) return;
+    const manager = prompt("Enter Manager Name:");
+    if (!manager) return;
+    
+    globalFacilities.push({
+        id: globalFacilities.length + 1,
+        name: name,
+        status: "Active",
+        patients: 0,
+        manager: manager,
+        docs: 0,
+        nurses: 0,
+        alerts: 0,
+        response: "-"
+    });
+    
+    showToast('New facility added successfully.', 'success');
+    loadFacilities();
+}
+
+function saveBrandSettings(btn) {
+    const orgName = document.getElementById('orgNameInput').value;
+    const pColor = document.getElementById('primaryColorInput').value;
+    const sColor = document.getElementById('secondaryColorInput').value;
+    const orgUrl = document.getElementById('orgUrlInput').value;
+    
+    // Update CSS variables globally
+    document.documentElement.style.setProperty('--primary', pColor);
+    document.documentElement.style.setProperty('--primary-hover', pColor);
+    document.documentElement.style.setProperty('--success', sColor);
+    
+    // Update Branding in DOM
+    const brandLabel = document.querySelector('.nav-brand');
+    if (brandLabel) {
+        brandLabel.innerHTML = `<i class="fa-solid fa-shield-heart"></i> ${orgName}`;
+    }
+    
+    handleAction(btn, 'Save Brand Settings', 'Organization settings updated. Colors applied!', 'success');
+}
