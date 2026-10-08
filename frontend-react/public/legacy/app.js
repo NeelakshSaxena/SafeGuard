@@ -116,7 +116,7 @@ function openSidebar(elderId) {
         <h2 style="margin-bottom: 0.5rem; color: ${color};">${patient.name}</h2>
         <p class="text-muted" style="margin-bottom: 1.5rem;">Age: 76 | DOB: ${patient.dob}</p>
         
-        <div style="background: rgba(255,255,255,0.02); padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border); margin-bottom: 1.5rem;">
+        <div style="background: rgba(0,0,0,0.02); padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border); margin-bottom: 1.5rem;">
             <h4 class="mb-1 text-muted" style="text-transform:uppercase; font-size: 0.75rem;">Real-time Status</h4>
             <div class="d-flex justify-between mb-1">
                 <span>Status:</span>
@@ -248,7 +248,7 @@ function renderElderlyCards() {
             <div class="card card-interactive" style="border-left: 4px solid ${color}" onclick="openSidebar(${e.elder_id})">
                 <div class="d-flex justify-between align-center mb-1">
                     <h3 style="margin:0; font-size: 1.1rem;">${e.name}</h3>
-                    <span style="color: ${color}; font-size: 0.75rem; font-weight: 600; padding: 2px 6px; background: rgba(255,255,255,0.05); border-radius: 10px;"><i class="fa-solid ${icon}"></i> ${e.status}</span>
+                    <span style="color: ${color}; font-size: 0.75rem; font-weight: 600; padding: 2px 6px; background: rgba(0,0,0,0.05); border-radius: 10px;"><i class="fa-solid ${icon}"></i> ${e.status}</span>
                 </div>
                 
                 <div class="text-muted" style="font-size: 0.8rem; margin-bottom: 0.5rem;">Age: 76 | Risk Score: <span style="color: ${risk > 40 ? 'var(--danger)' : 'var(--success)'}">${risk}</span></div>
@@ -258,7 +258,7 @@ function renderElderlyCards() {
                     <span style="color: var(--primary);"><i class="fa-solid fa-location-dot"></i> Home</span>
                 </p>
                 
-                <div style="background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+                <div style="background: rgba(0,0,0,0.03); padding: 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
                     <span>Adherence</span>
                     <div style="display: flex; align-items: center; gap: 0.5rem; width: 60%;">
                         <div style="flex:1; height: 4px; background: var(--bg); border-radius: 2px;">
@@ -389,7 +389,7 @@ async function fetchAnalytics() {
     } catch (e) { 
         console.error("Analytics Fetch Error: ", e); 
         const errorBox = document.createElement('div');
-        errorBox.style = "background: #EF4444; color: white; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;";
+        errorBox.style = "background: #EF4444; color: var(--text-main); padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;";
         errorBox.innerHTML = `<strong>Error Rendering Charts:</strong><br><pre>${e.message}</pre>`;
         const container = document.getElementById('complianceChart').parentElement;
         container.appendChild(errorBox);
@@ -452,7 +452,7 @@ async function fetchDbStats() {
         data.history.forEach(h => {
             const timeColor = h.ms > 100 ? 'var(--warning)' : 'var(--success)';
             historyBox.innerHTML += `
-                <div style="background: rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.8rem;">
+                <div style="background: rgba(0,0,0,0.05); padding: 0.75rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.8rem;">
                     <div class="d-flex justify-between mb-1 text-muted">
                         <span>${h.time}</span>
                         <span style="color: ${timeColor}">${h.ms}ms ⚡</span>
@@ -608,7 +608,7 @@ window.addEventListener("message", (event) => {
         fetchDashboardStats();
         // Show a brief toast message in the legacy UI
         const toast = document.createElement('div');
-        toast.style = "position: fixed; bottom: 20px; right: 20px; background: var(--success); color: white; padding: 1rem; border-radius: 0.5rem; z-index: 9999; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: opacity 0.5s;";
+        toast.style = "position: fixed; bottom: 20px; right: 20px; background: var(--success); color: var(--text-main); padding: 1rem; border-radius: 0.5rem; z-index: 9999; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: opacity 0.5s;";
         toast.innerHTML = `<i class="fa-solid fa-location-dot"></i> Check-in updated for Elder ID: ${payload.elder_id}`;
         document.body.appendChild(toast);
         setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 500); }, 4000);
@@ -618,7 +618,7 @@ window.addEventListener("message", (event) => {
 function showToast(message, type = 'success') {
     const toast = document.createElement('div');
     const bgColor = type === 'success' ? 'var(--success)' : type === 'warning' ? 'var(--warning)' : type === 'danger' ? 'var(--danger)' : 'var(--primary)';
-    toast.style = `position: fixed; bottom: 20px; right: 20px; background: ${bgColor}; color: white; padding: 1rem; border-radius: 0.5rem; z-index: 9999; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: opacity 0.5s; display: flex; align-items: center; gap: 0.5rem; max-width: 400px;`;
+    toast.style = `position: fixed; bottom: 20px; right: 20px; background: ${bgColor}; color: var(--text-main); padding: 1rem; border-radius: 0.5rem; z-index: 9999; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: opacity 0.5s; display: flex; align-items: center; gap: 0.5rem; max-width: 400px;`;
     
     let icon = 'fa-circle-info';
     if(type === 'success') icon = 'fa-circle-check';
@@ -672,7 +672,7 @@ async function openMessageModal(doctorName) {
         const histDiv = document.getElementById('msgHistory');
         if (filtered.length > 0) {
             histDiv.innerHTML = '<p class="text-muted" style="font-size:0.8rem; margin-bottom:0.5rem;">Previous messages:</p>' +
-                filtered.map(m => `<div style="background:rgba(255,255,255,0.03);padding:0.5rem;border-radius:0.25rem;margin-bottom:0.5rem;font-size:0.85rem;"><strong>${m.sender}</strong>: ${m.body} <span class="text-muted" style="font-size:0.75rem;">${m.timestamp}</span></div>`).join('');
+                filtered.map(m => `<div style="background:rgba(0,0,0,0.03);padding:0.5rem;border-radius:0.25rem;margin-bottom:0.5rem;font-size:0.85rem;"><strong>${m.sender}</strong>: ${m.body} <span class="text-muted" style="font-size:0.75rem;">${m.timestamp}</span></div>`).join('');
         } else {
             histDiv.innerHTML = '<p class="text-muted" style="font-size:0.85rem;">No previous messages.</p>';
         }
@@ -783,7 +783,7 @@ async function loadConsultations() {
                      <button class="btn btn-sm btn-outline" onclick="addReminder('${c.doctor_name}','${c.scheduled_at}')">Add Reminder</button>
                    </div>`;
             container.innerHTML += `
-                <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);padding:1rem;border-radius:0.5rem;margin-bottom:1rem;border-left:3px solid ${borderColor};">
+                <div style="background:rgba(0,0,0,0.02);border:1px solid var(--border);padding:1rem;border-radius:0.5rem;margin-bottom:1rem;border-left:3px solid ${borderColor};">
                     <div class="d-flex justify-between align-center mb-1">
                         <strong>${statusIcon} ${c.scheduled_at} - ${c.doctor_name}</strong>
                         ${statusLabel}
@@ -1154,7 +1154,7 @@ async function loadHealthLogs() {
         container.innerHTML = '<h4 class="text-muted" style="font-size:0.75rem;text-transform:uppercase;margin-bottom:0.5rem;">Recent Health Logs (from DB)</h4>';
         logs.slice(0, 5).forEach(l => {
             const color = l.severity === 'Critical' ? 'var(--danger)' : l.severity === 'Warning' ? 'var(--warning)' : 'var(--success)';
-            container.innerHTML += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:0.5rem;padding:0.5rem;background:rgba(255,255,255,0.02);border-radius:0.25rem;border-left:3px solid ${color};"><span>${l.event_type}</span><span class="text-muted">${l.timestamp}</span></div>`;
+            container.innerHTML += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:0.5rem;padding:0.5rem;background:rgba(0,0,0,0.02);border-radius:0.25rem;border-left:3px solid ${color};"><span>${l.event_type}</span><span class="text-muted">${l.timestamp}</span></div>`;
         });
     } catch(e) { console.error(e); }
 }
@@ -1199,7 +1199,7 @@ function saveContact() {
     if (contactsList) {
         const btn = contactsList.querySelector('button');
         const newContact = document.createElement('div');
-        newContact.style = 'background:rgba(255,255,255,0.02);border:1px solid var(--border);padding:1rem;border-radius:0.5rem;margin-bottom:1rem;';
+        newContact.style = 'background:rgba(0,0,0,0.02);border:1px solid var(--border);padding:1rem;border-radius:0.5rem;margin-bottom:1rem;';
         newContact.innerHTML = `
             <h4 style="margin:0 0 0.25rem 0;">${name} (${relation})</h4>
             <p class="text-success" style="font-size:0.85rem;margin-bottom:0.5rem;"><i class="fa-solid fa-user-check"></i> Emergency Contact</p>
@@ -1348,10 +1348,10 @@ function openAIDetailedAnalysis() {
         </div>
         <h4 style="margin:0 0 0.5rem;font-size:0.9rem;">Recommended Actions</h4>
         <ul style="list-style:none;padding:0;font-size:0.85rem;">
-            <li style="margin-bottom:0.5rem;padding:0.5rem;background:rgba(255,255,255,0.03);border-radius:0.25rem;">✅ Schedule physical therapy evaluation within 48h</li>
-            <li style="margin-bottom:0.5rem;padding:0.5rem;background:rgba(255,255,255,0.03);border-radius:0.25rem;">✅ Increase monitoring frequency to every 2 hours</li>
-            <li style="margin-bottom:0.5rem;padding:0.5rem;background:rgba(255,255,255,0.03);border-radius:0.25rem;">✅ Review Atenolol dosage with Dr. Sharma</li>
-            <li style="padding:0.5rem;background:rgba(255,255,255,0.03);border-radius:0.25rem;">✅ Install bathroom grab bars</li>
+            <li style="margin-bottom:0.5rem;padding:0.5rem;background:rgba(0,0,0,0.03);border-radius:0.25rem;">✅ Schedule physical therapy evaluation within 48h</li>
+            <li style="margin-bottom:0.5rem;padding:0.5rem;background:rgba(0,0,0,0.03);border-radius:0.25rem;">✅ Increase monitoring frequency to every 2 hours</li>
+            <li style="margin-bottom:0.5rem;padding:0.5rem;background:rgba(0,0,0,0.03);border-radius:0.25rem;">✅ Review Atenolol dosage with Dr. Sharma</li>
+            <li style="padding:0.5rem;background:rgba(0,0,0,0.03);border-radius:0.25rem;">✅ Install bathroom grab bars</li>
         </ul>
         <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:1rem;" onclick="showToast('Actions added to care plan','success');closeModal('aiDetailModal');">
             <i class="fa-solid fa-clipboard-check"></i> Add to Care Plan
@@ -1482,7 +1482,7 @@ function openGeofenceSettings() {
         <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;">Configure safe zones. Alerts trigger when a patient exits a geofence.</p>
         <h4 style="font-size:0.9rem;margin-bottom:0.5rem;">Active Geofences</h4>
         <div id="geofenceList">
-            <div style="background:rgba(255,255,255,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:0.75rem;border-left:3px solid var(--success);">
+            <div style="background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:0.75rem;border-left:3px solid var(--success);">
                 <div class="d-flex justify-between align-center">
                     <div>
                         <strong>🏠 Home</strong>
@@ -1491,7 +1491,7 @@ function openGeofenceSettings() {
                     <span class="text-success" style="font-size:0.8rem;">Active</span>
                 </div>
             </div>
-            <div style="background:rgba(255,255,255,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:0.75rem;border-left:3px solid var(--primary);">
+            <div style="background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:0.75rem;border-left:3px solid var(--primary);">
                 <div class="d-flex justify-between align-center">
                     <div>
                         <strong>💊 Apollo Pharmacy</strong>
@@ -1500,7 +1500,7 @@ function openGeofenceSettings() {
                     <span class="text-primary" style="font-size:0.8rem;">Active</span>
                 </div>
             </div>
-            <div style="background:rgba(255,255,255,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:1rem;border-left:3px solid var(--warning);">
+            <div style="background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:1rem;border-left:3px solid var(--warning);">
                 <div class="d-flex justify-between align-center">
                     <div>
                         <strong>🏥 City Hospital</strong>
@@ -1536,7 +1536,7 @@ function openGeofenceSettings() {
             var radius = document.getElementById('geoRadius').value || '200';
             var listEl = document.getElementById('geofenceList');
             var newZone = document.createElement('div');
-            newZone.style = 'background:rgba(255,255,255,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:0.75rem;border-left:3px solid var(--success);';
+            newZone.style = 'background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:0.75rem;border-left:3px solid var(--success);';
             newZone.innerHTML = '<div class=\\'d-flex justify-between align-center\\'><div><strong>📍 '+name+'</strong><p class=\\'text-muted\\' style=\\'font-size:0.8rem;margin:0.25rem 0 0;\\'>Radius: '+radius+'m | '+addr+'</p></div><span class=\\'text-success\\' style=\\'font-size:0.8rem;\\'>Active</span></div>';
             listEl.appendChild(newZone);
             document.getElementById('geoName').value='';
@@ -1590,7 +1590,7 @@ function openManageFacility(facilityTitle) {
             <button class="chip" onclick="this.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));this.classList.add('active');">Patients</button>
             <button class="chip" onclick="this.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));this.classList.add('active');">Reports</button>
         </div>
-        <div style="background:rgba(255,255,255,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:1rem;">
+        <div style="background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:1rem;">
             <div class="d-flex justify-between" style="margin-bottom:0.5rem;"><span class="text-muted">Occupancy</span><span>72%</span></div>
             <div style="height:6px;background:var(--bg);border-radius:3px;margin-bottom:1rem;"><div style="width:72%;height:100%;background:var(--success);border-radius:3px;"></div></div>
             <div class="d-flex justify-between" style="margin-bottom:0.5rem;"><span class="text-muted">Avg Response Time</span><span>12 mins</span></div>
@@ -1638,7 +1638,7 @@ function saveBrandSettings() {
 function openUpgradePlan() {
     createModal('upgradePlanModal', '<i class="fa-solid fa-rocket text-primary"></i> Upgrade Your Plan', `
         <div class="d-flex" style="gap:1rem;margin-bottom:1rem;">
-            <div style="flex:1;background:rgba(255,255,255,0.03);padding:1.25rem;border-radius:0.5rem;border:1px solid var(--border);">
+            <div style="flex:1;background:rgba(0,0,0,0.03);padding:1.25rem;border-radius:0.5rem;border:1px solid var(--border);">
                 <h4 style="margin:0 0 0.25rem;color:var(--primary);">Premium</h4>
                 <p style="font-size:0.75rem;color:var(--text-muted);margin:0 0 0.5rem;">Current Plan</p>
                 <p style="font-size:1.5rem;font-weight:bold;margin:0;">₹9,999<span class="text-muted" style="font-size:0.8rem;font-weight:400;">/mo</span></p>
@@ -1752,7 +1752,7 @@ function openCommunityDiscover() {
             <span class="chip">Health</span>
             <span class="chip">Mental Health</span>
         </div>
-        <div style="margin-bottom:0.75rem;background:rgba(255,255,255,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);">
+        <div style="margin-bottom:0.75rem;background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);">
             <div class="d-flex justify-between align-center">
                 <div>
                     <strong>Fall Prevention Support</strong>
@@ -1761,7 +1761,7 @@ function openCommunityDiscover() {
                 <button class="btn btn-sm btn-primary" onclick="showToast('Joined Fall Prevention Support!','success');">Join</button>
             </div>
         </div>
-        <div style="margin-bottom:0.75rem;background:rgba(255,255,255,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);">
+        <div style="margin-bottom:0.75rem;background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);">
             <div class="d-flex justify-between align-center">
                 <div>
                     <strong>Dementia Caregivers Network</strong>
@@ -1770,7 +1770,7 @@ function openCommunityDiscover() {
                 <button class="btn btn-sm btn-primary" onclick="showToast('Joined Dementia Caregivers Network!','success');">Join</button>
             </div>
         </div>
-        <div style="background:rgba(255,255,255,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);">
+        <div style="background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);">
             <div class="d-flex justify-between align-center">
                 <div>
                     <strong>Caregiver Self-Care</strong>
@@ -1808,7 +1808,7 @@ function openExpertQA() {
             <i class="fa-solid fa-paper-plane"></i> Submit Question
         </button>
         <h4 style="margin:1.5rem 0 0.5rem;font-size:0.9rem;">Recent Answers</h4>
-        <div style="background:rgba(255,255,255,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:0.75rem;">
+        <div style="background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:0.75rem;">
             <p style="font-size:0.85rem;margin:0 0 0.5rem;"><strong>Q:</strong> What are the best fall-proof shoes?</p>
             <p style="font-size:0.85rem;margin:0;color:var(--success);"><strong>Dr. Sharma:</strong> Look for non-slip soles, ankle support. Brands: New Balance 928v3, Skechers GoWalk.</p>
         </div>
