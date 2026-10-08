@@ -36,9 +36,18 @@ class User(Base):
 class Elderly(Base):
     __tablename__ = "elderly"
     elder_id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"))
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
     name = Column(String)
     status = Column(String, default="Safe")
+    adherence_pct = Column(Integer, default=100)
+    last_checkin = Column(String, nullable=True)
+    login_id = Column(String, unique=True, nullable=True) # e.g. "patient1"
+
+class DoctorPatientLink(Base):
+    __tablename__ = "doctor_patient_links"
+    link_id = Column(Integer, primary_key=True, index=True)
+    doctor_login_id = Column(String) # e.g. "doctor1"
+    elder_id = Column(Integer, ForeignKey("elderly.elder_id"))
 
 class CheckIn(Base):
     __tablename__ = "check_in"
@@ -159,6 +168,39 @@ def seed_data():
                 Consultation(doctor_name="Dr. Sharma", specialty="Cardiologist", scheduled_at="Oct 8, 3:00 PM", status="Upcoming", notes="Cardiology follow-up"),
             ])
             db.commit()
+            
+        # Seed patients
+        if db.query(Elderly).count() == 0:
+            p1 = Elderly(name="Alice Smith", status="Safe", adherence_pct=95, last_checkin="2024-10-07 10:45:00", login_id="patient1")
+            p2 = Elderly(name="Bob Jones", status="Warning", adherence_pct=78, last_checkin="2024-10-07 09:15:00", login_id="patient2")
+            p3 = Elderly(name="Carol White", status="Danger", adherence_pct=40, last_checkin=None, login_id="patient3")
+            p4 = Elderly(name="David Miller", status="Safe", adherence_pct=88, last_checkin="2024-10-07 08:00:00", login_id="patient4")
+            db.add_all([p1, p2, p3, p4])
+            db.commit()
+            
+            # Seed doctor-patient links
+            # doctor1 (Dr. Patel) assigned to patient1, patient2
+            db.add_all([
+                DoctorPatientLink(doctor_login_id="doctor1", elder_id=p1.elder_id),
+                DoctorPatientLink(doctor_login_id="doctor1", elder_id=p2.elder_id),
+                DoctorPatientLink(doctor_login_id="doctor1", elder_id=p3.elder_id),
+                # doctor2 (Dr. Sharma) assigned to patient2, patient3, patient4
+                DoctorPatientLink(doctor_login_id="doctor2", elder_id=p2.elder_id),
+                DoctorPatientLink(doctor_login_id="doctor2", elder_id=p3.elder_id),
+                DoctorPatientLink(doctor_login_id="doctor2", elder_id=p4.elder_id),
+            ])
+            db.commit()
+
+            # Seed some initial messages
+            db.add_all([
+                Message(sender="patient1", recipient="Alice Smith", body="Hello Alice!"),
+                Message(sender="patient1", recipient="doctor1", body="Hi Dr. Patel, feeling a bit dizzy today."),
+                Message(sender="doctor1", recipient="patient1", body="Please monitor your blood pressure and rest."),
+                Message(sender="patient2", recipient="doctor2", body="Dr. Sharma, can I reschedule my appointment?"),
+                Message(sender="doctor2", recipient="patient2", body="Yes, please use the booking tool."),
+            ])
+            db.commit()
+            
     finally:
         db.close()
 
@@ -262,12 +304,24 @@ async def submit_checkin(req: CheckInSchema, db: Session = Depends(get_db)):
     return {"message": "Check-in logged and broadcasted"}
 
 @app.get("/api/elderly")
-def get_elderly(db: Session = Depends(get_db)):
-    # Return mock data expected by app.js
+def get_elderly(doctor_id: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(Elderly)
+    if doctor_id:
+        # Get elder_ids linked to this doctor
+        linked = db.query(DoctorPatientLink.elder_id).filter(DoctorPatientLink.doctor_login_id == doctor_id).all()
+        linked_ids = [l[0] for l in linked]
+        query = query.filter(Elderly.elder_id.in_(linked_ids))
+    
+    patients = query.all()
     return [
-        {"elder_id": 1, "name": "Alice Smith", "status": "Safe", "last_checkin": "2024-10-07 10:45:00", "adherence_pct": 95},
-        {"elder_id": 2, "name": "Bob Jones", "status": "Warning", "last_checkin": "2024-10-07 09:15:00", "adherence_pct": 78},
-        {"elder_id": 3, "name": "Carol White", "status": "Danger", "last_checkin": None, "adherence_pct": 40}
+        {
+            "elder_id": p.elder_id,
+            "name": p.name,
+            "status": p.status,
+            "last_checkin": p.last_checkin,
+            "adherence_pct": p.adherence_pct,
+            "login_id": p.login_id
+        } for p in patients
     ]
 
 @app.get("/api/alerts")

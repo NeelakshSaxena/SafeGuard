@@ -162,9 +162,9 @@
             </form>
             <div style="margin-top: 1.5rem; font-size: 0.85rem; color: var(--text-muted); text-align: left; background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 0.5rem;">
                 <strong>Test IDs:</strong><br>
-                <span style="color:var(--success)">patient1</span> (Patient View)<br>
+                <span style="color:var(--success)">patient1</span> – <span style="color:var(--success)">patient4</span> (Patient View)<br>
                 <span style="color:var(--primary)">caregiver1</span> (Caregiver View)<br>
-                <span style="color:var(--warning)">doctor1</span> (Clinical View)
+                <span style="color:var(--warning)">doctor1</span> (Dr. Patel) | <span style="color:var(--warning)">doctor2</span> (Dr. Sharma)
             </div>
         </div>
     </div>
@@ -376,11 +376,31 @@
             <!-- 4. DOCTOR / CLINICAL VIEW -->
             <div id="clinical" class="tab-content">
                 <h2 class="mb-2"><i class="fa-solid fa-stethoscope"></i> Clinical Dashboard</h2>
-                <div class="filter-bar">
-                    <button class="chip active">My Assigned Patients</button>
-                    <button class="chip">High Risk</button>
-                    <button class="chip">Requires Review</button>
+
+                <!-- Doctor Stats Row -->
+                <div class="grid-2 mb-2" style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem;">
+                    <div class="card" style="border-left:4px solid var(--primary);">
+                        <div class="stat-val" id="doctorPatientCount">0</div>
+                        <div class="stat-label">Assigned Patients</div>
+                    </div>
+                    <div class="card" style="border-left:4px solid var(--danger);">
+                        <div class="stat-val" id="doctorHighRiskCount">0</div>
+                        <div class="stat-label">High Risk</div>
+                    </div>
+                    <div class="card" style="border-left:4px solid var(--success);">
+                        <div class="stat-val" id="doctorMsgCount">0</div>
+                        <div class="stat-label">Unread Messages</div>
+                    </div>
                 </div>
+
+                <!-- Filter Chips -->
+                <div class="filter-bar">
+                    <button class="chip active" onclick="renderClinicalTable('all')">My Assigned Patients</button>
+                    <button class="chip" onclick="renderClinicalTable('high-risk')">High Risk</button>
+                    <button class="chip" onclick="renderClinicalTable('review')">Requires Review</button>
+                </div>
+
+                <!-- Patient Table -->
                 <div class="card" style="padding: 0;">
                     <table>
                         <thead>
@@ -391,12 +411,21 @@
                                 <th>Med Adherence</th>
                                 <th>Risk Score</th>
                                 <th>Status</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="clinicalTableBody">
-                            <!-- Mock Data Populated by JS -->
+                            <!-- Populated by JS -->
                         </tbody>
                     </table>
+                </div>
+
+                <!-- Doctor Messages Inbox -->
+                <div style="margin-top:1.5rem;">
+                    <h3 class="mb-1"><i class="fa-solid fa-inbox"></i> Patient Messages Inbox</h3>
+                    <div class="card" id="doctorInbox">
+                        <p class="text-muted">Loading messages...</p>
+                    </div>
                 </div>
             </div>
 
@@ -451,6 +480,33 @@
             <!-- 7. TELEHEALTH -->
             <div id="telehealth" class="tab-content">
                 <h2 class="mb-2"><i class="fa-solid fa-video"></i> Telemedicine & Video Consultation</h2>
+
+                <!-- Doctor Telehealth View -->
+                <div id="telehealthDoctorView" style="display:none;">
+                    <div class="grid-2">
+                        <div class="card">
+                            <h3 class="mb-1 text-primary"><i class="fa-solid fa-calendar-check"></i> My Patient Appointments</h3>
+                            <div id="doctorConsultationsList">
+                                <p class="text-muted">Loading scheduled consultations...</p>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <h3 class="mb-1 text-primary"><i class="fa-solid fa-bolt"></i> Quick Actions</h3>
+                            <button class="btn btn-outline" style="width:100%;justify-content:center;margin-bottom:0.75rem;" onclick="switchTab('clinical')">
+                                <i class="fa-solid fa-stethoscope"></i> Back to Clinical Dashboard
+                            </button>
+                            <button class="btn btn-outline" style="width:100%;justify-content:center;margin-bottom:0.75rem;" onclick="switchTab('records')">
+                                <i class="fa-solid fa-file-medical"></i> View Health Records
+                            </button>
+                            <button class="btn btn-outline" style="width:100%;justify-content:center;" onclick="switchTab('analytics')">
+                                <i class="fa-solid fa-chart-pie"></i> Analytics & Trends
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Patient Telehealth View -->
+                <div id="telehealthPatientView">
                 <div class="grid-2">
                     <div class="card">
                         <h3 class="mb-1 text-primary">Available Doctors</h3>
@@ -464,8 +520,8 @@
                                 <img src="https://ui-avatars.com/api/?name=Dr+Patel&background=10B981&color=fff&rounded=true" width="50" height="50">
                             </div>
                             <div class="d-flex gap-1 mt-2" style="gap: 0.5rem; margin-top: 0.5rem;">
-                                <button class="btn btn-sm btn-success w-100" onclick="bookConsultation('Dr. Patel', 'General Practice')"><i class="fa-solid fa-video"></i> Book Call</button>
-                                <button class="btn btn-sm btn-outline" onclick="openMessageModal('Dr. Patel')"><i class="fa-solid fa-message"></i> Message</button>
+                                <button class="btn btn-sm btn-success w-100" onclick="bookConsultation('doctor1', 'General Practice')"><i class="fa-solid fa-video"></i> Book Call</button>
+                                <button class="btn btn-sm btn-outline" onclick="openMessageModal('doctor1')"><i class="fa-solid fa-message"></i> Message</button>
                             </div>
                         </div>
                         <div>
@@ -478,8 +534,8 @@
                                 <img src="https://ui-avatars.com/api/?name=Dr+Sharma&background=3B82F6&color=fff&rounded=true" width="50" height="50">
                             </div>
                             <div class="d-flex gap-1 mt-2" style="gap: 0.5rem; margin-top: 0.5rem;">
-                                <button class="btn btn-sm btn-primary w-100" onclick="bookConsultation('Dr. Sharma', 'Cardiologist')"><i class="fa-solid fa-calendar"></i> Book Later</button>
-                                <button class="btn btn-sm btn-outline" onclick="openMessageModal('Dr. Sharma')"><i class="fa-solid fa-message"></i> Message</button>
+                                <button class="btn btn-sm btn-primary w-100" onclick="bookConsultation('doctor2', 'Cardiologist')"><i class="fa-solid fa-calendar"></i> Book Later</button>
+                                <button class="btn btn-sm btn-outline" onclick="openMessageModal('doctor2')"><i class="fa-solid fa-message"></i> Message</button>
                             </div>
                         </div>
                     </div>
@@ -489,6 +545,7 @@
                             <p class="text-muted">Loading consultations...</p>
                         </div>
                     </div>
+                </div>
                 </div>
             </div>
 
@@ -939,7 +996,7 @@
         .highlight-node { background-color: rgba(79, 70, 229, 0.4) !important; transition: 0.3s; transform: scale(1.05); }
     </style>
 
-    <script src="app.js?v=3"></script>
+    <script src="app.js?v=4"></script>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {

@@ -1,6 +1,7 @@
 const API_BASE = 'http://127.0.0.1:5000/api';
 let globalElderlyData = [];
 let currentRole = '';
+let currentUserId = '';
 
 // --- Initialization & UI Logic ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -9,9 +10,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Check role in localStorage
     const savedRole = localStorage.getItem('safeguard_role');
-    if (savedRole) {
+    const savedUserId = localStorage.getItem('safeguard_userid');
+    if (savedRole && savedUserId) {
         document.getElementById('loginScreen').style.display = 'none';
         currentRole = savedRole;
+        currentUserId = savedUserId;
         changeRole(true); // initialized
     } else {
         document.getElementById('loginScreen').style.display = 'flex';
@@ -33,14 +36,19 @@ function handleLogin(e) {
         return;
     }
     
+    
     localStorage.setItem('safeguard_role', currentRole);
+    localStorage.setItem('safeguard_userid', loginId);
+    currentUserId = loginId;
     document.getElementById('loginScreen').style.display = 'none';
     changeRole(true);
 }
 
 function handleLogout() {
     localStorage.removeItem('safeguard_role');
+    localStorage.removeItem('safeguard_userid');
     currentRole = '';
+    currentUserId = '';
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('loginId').value = '';
     document.getElementById('loginPass').value = '';
@@ -58,7 +66,7 @@ function changeRole(isInit = false) {
     const label = document.getElementById('currentUserLabel');
     if(role === 'caregiver') label.innerText = 'Caregiver View';
     if(role === 'elderly') label.innerText = 'Patient View';
-    if(role === 'doctor') label.innerText = 'Dr. Patel (Clinical)';
+    if(role === 'doctor') label.innerText = `Doctor View (${currentUserId})`;
     
     // Hide all nav groups
     document.querySelectorAll('.nav-group').forEach(el => el.style.display = 'none');
@@ -97,8 +105,21 @@ function switchTab(tabId) {
     if (tabId === 'analytics') fetchAnalytics();
     if (tabId === 'dbviz') fetchDbStats();
     if (tabId === 'clinical') fetchClinicalData();
+    // Telehealth - role-aware
+    if (tabId === 'telehealth') {
+        const doctorView = document.getElementById('telehealthDoctorView');
+        const patientView = document.getElementById('telehealthPatientView');
+        if (currentRole === 'doctor') {
+            if (doctorView) doctorView.style.display = 'block';
+            if (patientView) patientView.style.display = 'none';
+            loadDoctorConsultations();
+        } else {
+            if (doctorView) doctorView.style.display = 'none';
+            if (patientView) patientView.style.display = 'block';
+            loadConsultations();
+        }
+    }
     // Patient view tabs
-    if (tabId === 'telehealth') loadConsultations();
     if (tabId === 'prescriptions') loadRefills();
     if (tabId === 'wearables') loadDevices();
     if (tabId === 'my-profile') loadProfile();
@@ -114,7 +135,7 @@ function openSidebar(elderId) {
     
     const content = `
         <h2 style="margin-bottom: 0.5rem; color: ${color};">${patient.name}</h2>
-        <p class="text-muted" style="margin-bottom: 1.5rem;">Age: 76 | DOB: ${patient.dob}</p>
+        <p class="text-muted" style="margin-bottom: 1.5rem;">Age: 76 | DOB: ${patient.dob || 'Jan 15, 1948'}</p>
         
         <div style="background: rgba(255,255,255,0.02); padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border); margin-bottom: 1.5rem;">
             <h4 class="mb-1 text-muted" style="text-transform:uppercase; font-size: 0.75rem;">Real-time Status</h4>
@@ -139,8 +160,8 @@ function openSidebar(elderId) {
         <p style="font-size: 0.875rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-user-check text-primary"></i> Mom (Primary) - Active</p>
         <p style="font-size: 0.875rem; margin-bottom: 1.5rem;"><i class="fa-solid fa-user-md text-primary"></i> Dr. Patel - Clinical</p>
         
-        <button class="btn btn-outline" style="width: 100%; justify-content: center; margin-bottom: 0.5rem;">Send Message</button>
-        <button class="btn btn-danger" style="width: 100%; justify-content: center;">Trigger Emergency Alert</button>
+        <button class="btn btn-outline" style="width: 100%; justify-content: center; margin-bottom: 0.5rem;" onclick="openMessageModal('${patient.login_id}')">Send Message</button>
+        <button class="btn btn-danger" style="width: 100%; justify-content: center;" onclick="alert('Emergency alert triggered for ${patient.name}!')">Trigger Emergency Alert</button>
     `;
     
     document.getElementById('patientDetailsContent').innerHTML = content;
@@ -349,29 +370,147 @@ async function fetchAnalytics() {
 }
 
 // --- Doctor Clinical View ---
+let currentClinicalFilter = 'all';
+
 async function fetchClinicalData() {
     try {
-        const res = await fetch(`${API_BASE}/elderly`);
+        const res = await fetch(`${API_BASE}/elderly?doctor_id=${currentUserId}`);
         const elderly = await res.json();
+        globalElderlyData = elderly;
+
+        // Update stats cards
+        const countEl = document.getElementById('doctorPatientCount');
+        if (countEl) countEl.innerText = elderly.length;
+        const highRiskCount = elderly.filter(e => (100 - e.adherence_pct) > 40 || e.status === 'Danger').length;
+        const hrEl = document.getElementById('doctorHighRiskCount');
+        if (hrEl) hrEl.innerText = highRiskCount;
+
+        renderClinicalTable(currentClinicalFilter);
+        loadDoctorInbox();
+    } catch (e) { 
+        console.error('fetchClinicalData error:', e); 
         const tbody = document.getElementById('clinicalTableBody');
-        tbody.innerHTML = '';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-danger" style="text-align:center;padding:2rem;">Failed to load patients. Is the backend running on port 5000?</td></tr>';
+    }
+}
+
+async function loadDoctorInbox() {
+    const inbox = document.getElementById('doctorInbox');
+    if (!inbox) return;
+    try {
+        const res = await fetch(`${API_BASE}/messages`);
+        const msgs = await res.json();
+        // Filter messages relevant to this doctor (sent TO or FROM this doctor)
+        const doctorMsgs = msgs.filter(m => m.recipient === currentUserId || m.sender === currentUserId);
         
-        elderly.forEach(e => {
-            const color = e.status === 'Safe' ? 'var(--success)' : e.status === 'Warning' ? 'var(--warning)' : 'var(--danger)';
-            const risk = 100 - e.adherence_pct;
-            
-            tbody.innerHTML += `
-                <tr>
-                    <td style="font-weight: bold; color: var(--text-main);">${e.name}</td>
-                    <td class="text-muted">76</td>
-                    <td>Diabetes, HTN</td>
-                    <td style="color: ${e.adherence_pct > 80 ? 'var(--success)' : 'var(--warning)'};">${e.adherence_pct}%</td>
-                    <td style="color: ${risk > 40 ? 'var(--danger)' : 'var(--success)'};">${risk}</td>
-                    <td style="color: ${color};"><i class="fa-solid fa-circle" style="font-size: 0.5rem; margin-right: 0.5rem;"></i>${e.status}</td>
-                </tr>
+        // Update message count stat
+        const msgCountEl = document.getElementById('doctorMsgCount');
+        if (msgCountEl) msgCountEl.innerText = doctorMsgs.length;
+
+        if (doctorMsgs.length === 0) {
+            inbox.innerHTML = '<p class="text-muted" style="text-align:center;padding:1rem;">No messages from patients yet.</p>';
+            return;
+        }
+        inbox.innerHTML = '';
+        doctorMsgs.forEach(m => {
+            const isFromMe = m.sender === currentUserId;
+            const borderColor = isFromMe ? 'var(--primary)' : 'var(--success)';
+            const direction = isFromMe ? '→ Sent to' : '← From';
+            const otherParty = isFromMe ? m.recipient : m.sender;
+            inbox.innerHTML += `
+                <div style="border-left:3px solid ${borderColor};padding:0.75rem;margin-bottom:0.5rem;background:rgba(255,255,255,0.02);border-radius:0 0.25rem 0.25rem 0;">
+                    <div class="d-flex justify-between align-center" style="margin-bottom:0.25rem;">
+                        <strong style="font-size:0.9rem;">${direction} ${getFriendlyName(otherParty)}</strong>
+                        <span class="text-muted" style="font-size:0.75rem;">${m.timestamp}</span>
+                    </div>
+                    <p style="margin:0;font-size:0.85rem;color:var(--text-muted);">${m.body}</p>
+                    ${!isFromMe ? '<button class="btn btn-sm btn-outline" style="margin-top:0.5rem;" onclick="openMessageModal(\'' + otherParty + '\')"><i class="fa-solid fa-reply"></i> Reply</button>' : ''}
+                </div>
             `;
         });
-    } catch (e) { console.error(e); }
+    } catch(e) { 
+        console.error('loadDoctorInbox error:', e);
+        inbox.innerHTML = '<p class="text-muted">Failed to load messages.</p>'; 
+    }
+}
+
+async function loadDoctorConsultations() {
+    const container = document.getElementById('doctorConsultationsList');
+    if (!container) return;
+    try {
+        const res = await fetch(`${API_BASE}/consultations`);
+        const consults = await res.json();
+        if (consults.length === 0) {
+            container.innerHTML = '<p class="text-muted" style="text-align:center;padding:1rem;">No consultations scheduled yet.</p>';
+            return;
+        }
+        container.innerHTML = '';
+        consults.forEach(c => {
+            const isCompleted = c.status === 'Completed';
+            const borderColor = isCompleted ? 'var(--success)' : 'var(--warning)';
+            const statusIcon = isCompleted ? '<i class="fa-solid fa-check text-success"></i>' : '<i class="fa-regular fa-clock text-warning"></i>';
+            const statusLabel = isCompleted ? '<span class="text-success" style="font-size:0.85rem;">Completed</span>' : '<span class="chip">Upcoming</span>';
+            container.innerHTML += `
+                <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);padding:1rem;border-radius:0.5rem;margin-bottom:0.75rem;border-left:3px solid ${borderColor};">
+                    <div class="d-flex justify-between align-center mb-1">
+                        <strong>${statusIcon} ${c.scheduled_at} - ${getFriendlyName(c.doctor_name)}</strong>
+                        ${statusLabel}
+                    </div>
+                    <p class="text-muted" style="font-size:0.85rem;">${c.specialty}${c.notes ? ' – ' + c.notes : ''}</p>
+                </div>
+            `;
+        });
+    } catch(e) { 
+        console.error(e);
+        container.innerHTML = '<p class="text-muted">Failed to load consultations.</p>';
+    }
+}
+
+function renderClinicalTable(filterType = 'all') {
+    currentClinicalFilter = filterType;
+    
+    const chips = document.querySelectorAll('#clinical .filter-bar .chip');
+    if (chips.length > 0) {
+        chips.forEach(c => c.classList.remove('active'));
+        if(filterType === 'all') chips[0].classList.add('active');
+        else if(filterType === 'high-risk') chips[1].classList.add('active');
+        else if(filterType === 'review') chips[2].classList.add('active');
+    }
+
+    const tbody = document.getElementById('clinicalTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    let filteredData = globalElderlyData;
+    if (filterType === 'high-risk') {
+        filteredData = globalElderlyData.filter(e => (100 - e.adherence_pct) > 40 || e.status === 'Danger');
+    } else if (filterType === 'review') {
+        filteredData = globalElderlyData.filter(e => e.status !== 'Safe');
+    }
+
+    if (filteredData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-muted" style="text-align:center;padding:2rem;">No patients match this filter.</td></tr>';
+        return;
+    }
+    
+    filteredData.forEach(e => {
+        const color = e.status === 'Safe' ? 'var(--success)' : e.status === 'Warning' ? 'var(--warning)' : 'var(--danger)';
+        const risk = 100 - e.adherence_pct;
+        
+        tbody.innerHTML += `
+            <tr>
+                <td style="font-weight: bold; color: var(--text-main); cursor: pointer;" onclick="openSidebar(${e.elder_id})"><i class="fa-solid fa-user-circle"></i> ${e.name}</td>
+                <td class="text-muted">76</td>
+                <td>Diabetes, HTN</td>
+                <td style="color: ${e.adherence_pct > 80 ? 'var(--success)' : 'var(--warning)'};">${e.adherence_pct}%</td>
+                <td style="color: ${risk > 40 ? 'var(--danger)' : 'var(--success)'};">${risk}</td>
+                <td style="color: ${color};"><i class="fa-solid fa-circle" style="font-size: 0.5rem; margin-right: 0.5rem;"></i>${e.status}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline" onclick="openMessageModal('${e.login_id}')"><i class="fa-solid fa-message"></i> Msg</button>
+                </td>
+            </tr>
+        `;
+    });
 }
 
 // --- DB Visualizer Animation & Query ---
@@ -590,6 +729,18 @@ function showToast(message, type = 'success') {
 // ==========================================
 
 // --- Messaging ---
+function getFriendlyName(id) {
+    const map = {
+        'doctor1': 'Dr. Patel',
+        'doctor2': 'Dr. Sharma',
+        'patient1': 'Alice Smith',
+        'patient2': 'Bob Jones',
+        'patient3': 'Carol White',
+        'patient4': 'David Miller'
+    };
+    return map[id] || id;
+}
+
 async function openMessageModal(doctorName) {
     const modal = document.getElementById('messageModal');
     if (!modal) {
@@ -612,7 +763,7 @@ async function openMessageModal(doctorName) {
         `;
         document.body.appendChild(m);
     }
-    document.getElementById('msgModalTitle').innerText = `Message ${doctorName}`;
+    document.getElementById('msgModalTitle').innerText = `Message ${getFriendlyName(doctorName)}`;
     document.getElementById('msgBody').value = '';
     document.getElementById('msgSendBtn').setAttribute('data-recipient', doctorName);
     document.getElementById('messageModal').classList.add('active');
@@ -624,7 +775,7 @@ async function openMessageModal(doctorName) {
         const histDiv = document.getElementById('msgHistory');
         if (filtered.length > 0) {
             histDiv.innerHTML = '<p class="text-muted" style="font-size:0.8rem; margin-bottom:0.5rem;">Previous messages:</p>' +
-                filtered.map(m => `<div style="background:rgba(255,255,255,0.03);padding:0.5rem;border-radius:0.25rem;margin-bottom:0.5rem;font-size:0.85rem;"><strong>${m.sender}</strong>: ${m.body} <span class="text-muted" style="font-size:0.75rem;">${m.timestamp}</span></div>`).join('');
+                filtered.map(m => `<div style="background:rgba(255,255,255,0.03);padding:0.5rem;border-radius:0.25rem;margin-bottom:0.5rem;font-size:0.85rem;"><strong>${getFriendlyName(m.sender)}</strong>: ${m.body} <span class="text-muted" style="font-size:0.75rem;">${m.timestamp}</span></div>`).join('');
         } else {
             histDiv.innerHTML = '<p class="text-muted" style="font-size:0.85rem;">No previous messages.</p>';
         }
@@ -643,15 +794,17 @@ async function sendMessage() {
         const res = await fetch(`${API_BASE}/messages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ recipient, body })
+            body: JSON.stringify({ recipient, body, sender: currentUserId })
         });
         const data = await res.json();
         if (data.success) {
-            showToast(`Message delivered to ${recipient}`, 'success');
+            showToast(`Message delivered to ${getFriendlyName(recipient)}`, 'success');
             document.getElementById('msgBody').value = '';
             // Refresh history
             openMessageModal(recipient);
             updateNotifBadge();
+            // Refresh doctor inbox if in doctor mode
+            if (currentRole === 'doctor') loadDoctorInbox();
         }
     } catch(e) {
         showToast('Failed to send – server offline', 'danger');
@@ -682,7 +835,7 @@ async function bookConsultation(doctorName, specialty) {
         `;
         document.body.appendChild(m);
     }
-    document.getElementById('bookModalTitle').innerText = `Book ${doctorName}`;
+    document.getElementById('bookModalTitle').innerText = `Book ${getFriendlyName(doctorName)}`;
     document.getElementById('bookDateTime').value = '';
     const confirmBtn = document.getElementById('bookConfirmBtn');
     confirmBtn.onclick = async () => {
@@ -699,7 +852,7 @@ async function bookConsultation(doctorName, specialty) {
             });
             const data = await res.json();
             if (data.success) {
-                showToast(`Consultation booked with ${doctorName} on ${formatted}`, 'success');
+                showToast(`Consultation booked with ${getFriendlyName(doctorName)} on ${formatted}`, 'success');
                 closeModal('bookModal');
                 loadConsultations();
                 updateNotifBadge();
