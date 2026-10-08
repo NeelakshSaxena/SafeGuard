@@ -625,7 +625,10 @@
             <div id="live-location" class="tab-content">
                 <div class="d-flex justify-between align-center mb-2">
                     <h2><i class="fa-solid fa-map-location-dot"></i> Live Location Tracking</h2>
-                    <button class="btn btn-outline"><i class="fa-solid fa-gear"></i> Geofence Settings</button>
+                    <div class="d-flex" style="gap:0.5rem;">
+                        <button class="btn btn-primary" onclick="pingDevice()"><i class="fa-solid fa-satellite-dish"></i> Ping Device</button>
+                        <button class="btn btn-outline" onclick="openGeofenceSettings()"><i class="fa-solid fa-gear"></i> Geofence Settings</button>
+                    </div>
                 </div>
                 <div class="grid-2">
                     <div class="card" style="padding: 0; overflow: hidden; min-height: 400px; background: #2a3a4c; display: flex; align-items: center; justify-content: center; position: relative;">
