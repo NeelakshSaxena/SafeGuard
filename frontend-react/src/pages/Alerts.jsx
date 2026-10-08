@@ -39,6 +39,7 @@ const Alerts = () => {
   const { role } = useRole();
   const [alerts, setAlerts] = useState([]);
   const [selectedAlert, setSelectedAlert] = useState(null);
+  const [filter, setFilter] = useState('Pending');
 
   const fetchAlertsData = () => {
     fetch(`${API_BASE}/alerts`)
@@ -52,12 +53,32 @@ const Alerts = () => {
   }, []);
 
   const handleAck = (id) => {
+    // Optimistic update
+    setAlerts(prev => prev.map(a => a.alert_id === id ? { ...a, status: 'Acknowledged' } : a));
     fetch(`${API_BASE}/alerts/${id}/acknowledge`, { method: 'POST' })
       .then(() => {
           setSelectedAlert(null);
-          fetchAlertsData();
+          // fetchAlertsData(); // skip full refetch to keep it snappy for the user
       })
-      .catch(e => console.error(e));
+      .catch(e => {
+          console.error(e);
+          fetchAlertsData(); // revert on fail
+      });
+  };
+
+  const handleAckAll = () => {
+    const pendingIds = alerts.filter(a => a.status === 'Pending').map(a => a.alert_id);
+    if (pendingIds.length === 0) return alert('No pending alerts to acknowledge.');
+    
+    // Optimistic update
+    setAlerts(prev => prev.map(a => a.status === 'Pending' ? { ...a, status: 'Acknowledged' } : a));
+    
+    // Send requests
+    Promise.all(pendingIds.map(id => fetch(`${API_BASE}/alerts/${id}/acknowledge`, { method: 'POST' })))
+      .catch(e => {
+          console.error(e);
+          fetchAlertsData(); // revert on fail
+      });
   };
 
   if (role !== 'caregiver') {
@@ -68,13 +89,14 @@ const Alerts = () => {
     <div>
       <div className="d-flex justify-between align-center mb-2">
         <h2 className="d-flex align-center gap-1"><AlertTriangle className="text-danger" /> Alert Management Center</h2>
-        <button className="btn btn-outline"><CheckCheck size={16} /> Acknowledge All</button>
+        <button className="btn btn-outline" onClick={handleAckAll}><CheckCheck size={16} /> Acknowledge All</button>
       </div>
       
       <div className="d-flex gap-sm mb-2 align-center">
-          <button className="chip active">Pending</button>
-          <button className="chip">Acknowledged</button>
-          <button className="chip">Resolved</button>
+          <button className={`chip ${filter === 'Pending' ? 'active' : ''}`} onClick={() => setFilter('Pending')}>Pending</button>
+          <button className={`chip ${filter === 'Acknowledged' ? 'active' : ''}`} onClick={() => setFilter('Acknowledged')}>Acknowledged</button>
+          <button className={`chip ${filter === 'Resolved' ? 'active' : ''}`} onClick={() => setFilter('Resolved')}>Resolved</button>
+          <button className={`chip ${filter === 'All' ? 'active' : ''}`} onClick={() => setFilter('All')}>All</button>
       </div>
 
       <div className="card" style={{ padding: 0 }}>
@@ -91,7 +113,15 @@ const Alerts = () => {
                 </tr>
             </thead>
             <tbody>
-                {alerts.map(a => {
+                {alerts
+                  .filter(a => {
+                    if (filter === 'All') return true;
+                    if (filter === 'Acknowledged' && a.status === 'Acknowledged') return true;
+                    if (filter === 'Resolved' && a.status === 'Resolved') return true;
+                    if (filter === 'Pending' && a.status === 'Pending') return true;
+                    return false;
+                  })
+                  .map(a => {
                     const color = a.severity === 'Critical' ? 'var(--danger)' : 'var(--warning)';
                     const statusColor = a.status === 'Pending' ? 'var(--danger)' : 'var(--success)';
                     return (
@@ -111,7 +141,7 @@ const Alerts = () => {
                                         <button className="btn btn-success btn-sm" onClick={() => handleAck(a.alert_id)}>Ack</button>
                                     </div>
                                 ) : (
-                                    <span className="text-muted d-flex align-center gap-sm"><CheckCheck size={14} /> Resolved</span>
+                                    <span className="text-muted d-flex align-center gap-sm"><CheckCheck size={14} /> {a.status}</span>
                                 )}
                             </td>
                         </tr>

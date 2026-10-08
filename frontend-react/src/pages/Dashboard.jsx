@@ -44,8 +44,8 @@ const PatientSidebar = ({ patient, onClose }) => {
       <p style={{ fontSize: '0.875rem', marginBottom: '0.5rem' }}><span className="text-primary mr-2">👤</span> Mom (Primary) - Active</p>
       <p style={{ fontSize: '0.875rem', marginBottom: '1.5rem' }}><span className="text-primary mr-2">🩺</span> Dr. Patel - Clinical</p>
       
-      <button className="btn btn-outline w-full mb-1">Send Message</button>
-      <button className="btn btn-danger w-full">Trigger Emergency Alert</button>
+      <button className="btn btn-outline w-full mb-1" onClick={() => alert(`Message sent to ${patient.name}`)}>Send Message</button>
+      <button className="btn btn-danger w-full" onClick={() => alert(`Emergency Alert Triggered for ${patient.name}!`)}>Trigger Emergency Alert</button>
     </div>
   );
 };
@@ -55,6 +55,8 @@ const Dashboard = () => {
   const [stats, setStats] = useState({ safe_count: 0, warning_count: 0, alert_count: 0, pending_alerts: 0 });
   const [elderly, setElderly] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
+  const [filter, setFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetch(`${API_BASE}/dashboard/stats`)
@@ -104,15 +106,23 @@ const Dashboard = () => {
       </div>
 
       <div className="d-flex gap-sm mb-2 align-center" style={{ flexWrap: 'wrap' }}>
-          <button className="chip active">All</button>
-          <button className="chip">Alerts Only</button>
-          <button className="chip">At Risk</button>
-          <button className="chip">Low Adherence</button>
-          <input type="text" className="chip" style={{ marginLeft: 'auto', outline: 'none', width: '250px', cursor: 'text' }} placeholder="Search by name..." />
+          <button className={`chip ${filter === 'All' ? 'active' : ''}`} onClick={() => setFilter('All')}>All</button>
+          <button className={`chip ${filter === 'Alerts Only' ? 'active' : ''}`} onClick={() => setFilter('Alerts Only')}>Alerts Only</button>
+          <button className={`chip ${filter === 'At Risk' ? 'active' : ''}`} onClick={() => setFilter('At Risk')}>At Risk</button>
+          <button className={`chip ${filter === 'Low Adherence' ? 'active' : ''}`} onClick={() => setFilter('Low Adherence')}>Low Adherence</button>
+          <input type="text" className="chip" style={{ marginLeft: 'auto', outline: 'none', width: '250px', cursor: 'text' }} placeholder="Search by name..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
       </div>
 
       <div className="grid-3">
-        {elderly.map(e => {
+        {elderly
+          .filter(e => {
+            if (searchQuery && !e.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+            if (filter === 'Alerts Only') return e.status === 'Alert';
+            if (filter === 'At Risk') return e.status === 'Warning' || e.status === 'Alert';
+            if (filter === 'Low Adherence') return e.adherence_pct < 80;
+            return true;
+          })
+          .map(e => {
             const risk = 100 - e.adherence_pct;
             const isSafe = e.status === 'Safe';
             const isWarning = e.status === 'Warning';

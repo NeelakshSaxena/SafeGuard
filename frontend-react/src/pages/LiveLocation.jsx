@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useRole } from '../context/RoleContext';
-import { MapPin, Settings, Home, SignalHigh, Crosshair } from 'lucide-react';
+import { MapPin, Settings, Home, SignalHigh, Crosshair, X, ShieldAlert, Save } from 'lucide-react';
 
 const LiveLocation = () => {
   const { role } = useRole();
+  const [showSettings, setShowSettings] = useState(false);
 
   if (role !== 'caregiver') return <div className="p-4 text-center">Restricted to Caregivers.</div>;
 
@@ -11,7 +12,12 @@ const LiveLocation = () => {
     <div>
       <div className="d-flex justify-between align-center mb-2">
         <h2 className="d-flex align-center gap-1"><MapPin className="text-primary" /> Live Location Tracking</h2>
-        <button className="btn btn-outline"><Settings size={16} /> Geofence Settings</button>
+        <button 
+            className={`btn ${showSettings ? 'btn-primary' : 'btn-outline'}`} 
+            onClick={() => setShowSettings(!showSettings)}
+        >
+            {showSettings ? <><X size={16} /> Close Settings</> : <><Settings size={16} /> Geofence Settings</>}
+        </button>
       </div>
       
       <div className="grid-2">
@@ -29,34 +35,92 @@ const LiveLocation = () => {
             </div>
         </div>
         
-        <div className="card">
-            <h3 className="mb-1 text-primary">Location History & Geofencing</h3>
-            
-            <div style={{ background: 'var(--bg)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--border)', marginBottom: '1rem' }}>
-                <h4 style={{ margin: '0 0 0.5rem 0' }}>Current Status</h4>
-                <p className="text-success d-flex align-center gap-sm mb-1"><CheckCircle size={16} /> Inside Safe Zone (Home)</p>
-                <p className="text-muted" style={{ fontSize: '0.85rem' }}>Accuracy: ~5 meters | Battery: 87%</p>
-                <button className="btn btn-outline w-full mt-1"><Crosshair size={16} /> Ping Device Now</button>
-            </div>
-            
-            <h4 style={{ margin: '0 0 0.5rem 0' }}>Today's Timeline</h4>
-            <div style={{ borderLeft: '2px solid var(--border)', marginLeft: '10px', paddingLeft: '20px', position: 'relative' }}>
-                <div style={{ marginBottom: '1rem', position: 'relative' }}>
-                    <div style={{ width: '10px', height: '10px', background: 'var(--primary)', borderRadius: '50%', position: 'absolute', left: '-26px', top: '5px' }}></div>
-                    <strong>10:30 AM</strong>
-                    <p className="text-muted" style={{ fontSize: '0.85rem' }}>Returned to Home</p>
+        <div className="card" style={{ position: 'relative', overflow: 'hidden' }}>
+            {showSettings ? (
+                <div className="settings-panel fade-in" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                    <h3 className="mb-1 text-primary d-flex align-center gap-sm"><ShieldAlert size={20} /> Geofence Settings</h3>
+                    <p className="text-muted mb-2" style={{ fontSize: '0.85rem' }}>Configure safe zones and alert preferences for the patient.</p>
+                    
+                    <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.5rem' }}>
+                        <div style={{ background: 'var(--bg)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--border)', marginBottom: '1rem' }}>
+                            <h4 style={{ margin: '0 0 0.5rem 0' }}>Safe Zone Configuration</h4>
+                            
+                            <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.5rem', fontWeight: 'bold' }}>Primary Location</label>
+                            <input type="text" className="form-control w-full mb-1" defaultValue="123 Caregiver Ave, Safeville" style={{ padding: '0.5rem', borderRadius: '0.25rem', border: '1px solid var(--border)', background: 'var(--card-bg)', color: 'var(--text-color)' }} />
+                            
+                            <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.5rem', fontWeight: 'bold' }}>Radius (Meters)</label>
+                            <div className="d-flex align-center gap-1">
+                                <input type="range" min="10" max="1000" defaultValue="150" style={{ flex: 1 }} />
+                                <span style={{ width: '40px', textAlign: 'right', fontSize: '0.85rem', fontWeight: 'bold' }}>150m</span>
+                            </div>
+                        </div>
+
+                        <div style={{ background: 'var(--bg)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--border)', marginBottom: '1rem' }}>
+                            <h4 style={{ margin: '0 0 0.5rem 0' }}>Alert Preferences</h4>
+                            
+                            <div className="d-flex justify-between align-center mb-1 pb-1" style={{ borderBottom: '1px solid var(--border)' }}>
+                                <div>
+                                    <strong style={{ display: 'block', fontSize: '0.9rem' }}>Exit Safe Zone Alert</strong>
+                                    <span className="text-muted" style={{ fontSize: '0.8rem' }}>Notify when patient leaves the safe zone</span>
+                                </div>
+                                <input type="checkbox" defaultChecked style={{ width: '20px', height: '20px' }} />
+                            </div>
+                            
+                            <div className="d-flex justify-between align-center mb-1 pb-1" style={{ borderBottom: '1px solid var(--border)' }}>
+                                <div>
+                                    <strong style={{ display: 'block', fontSize: '0.9rem' }}>Enter Safe Zone Alert</strong>
+                                    <span className="text-muted" style={{ fontSize: '0.8rem' }}>Notify when patient returns to safe zone</span>
+                                </div>
+                                <input type="checkbox" defaultChecked style={{ width: '20px', height: '20px' }} />
+                            </div>
+                            
+                            <div className="d-flex justify-between align-center">
+                                <div>
+                                    <strong style={{ display: 'block', fontSize: '0.9rem' }}>Low Battery Alert</strong>
+                                    <span className="text-muted" style={{ fontSize: '0.8rem' }}>Notify when device battery drops below 15%</span>
+                                </div>
+                                <input type="checkbox" defaultChecked style={{ width: '20px', height: '20px' }} />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-2 pt-1" style={{ borderTop: '1px solid var(--border)' }}>
+                        <button className="btn btn-primary w-full d-flex align-center justify-center gap-sm" onClick={() => { alert('Settings saved successfully!'); setShowSettings(false); }}>
+                            <Save size={16} /> Save Changes
+                        </button>
+                    </div>
                 </div>
-                <div style={{ marginBottom: '1rem', position: 'relative' }}>
-                    <div style={{ width: '10px', height: '10px', background: 'var(--warning)', borderRadius: '50%', position: 'absolute', left: '-26px', top: '5px' }}></div>
-                    <strong>09:15 AM</strong>
-                    <p className="text-muted" style={{ fontSize: '0.85rem' }}>Pharmacy (1.2km away)</p>
+            ) : (
+                <div className="history-panel fade-in">
+                    <h3 className="mb-1 text-primary">Location History & Geofencing</h3>
+                    
+                    <div style={{ background: 'var(--bg)', padding: '1rem', borderRadius: '0.5rem', border: '1px solid var(--border)', marginBottom: '1rem' }}>
+                        <h4 style={{ margin: '0 0 0.5rem 0' }}>Current Status</h4>
+                        <p className="text-success d-flex align-center gap-sm mb-1"><CheckCircle size={16} /> Inside Safe Zone (Home)</p>
+                        <p className="text-muted" style={{ fontSize: '0.85rem' }}>Accuracy: ~5 meters | Battery: 87%</p>
+                        <button className="btn btn-outline w-full mt-1 d-flex align-center justify-center gap-sm" onClick={() => alert('Ping sent to device. Awaiting response...')}><Crosshair size={16} /> Ping Device Now</button>
+                    </div>
+                    
+                    <h4 style={{ margin: '0 0 0.5rem 0' }}>Today's Timeline</h4>
+                    <div style={{ borderLeft: '2px solid var(--border)', marginLeft: '10px', paddingLeft: '20px', position: 'relative' }}>
+                        <div style={{ marginBottom: '1rem', position: 'relative' }}>
+                            <div style={{ width: '10px', height: '10px', background: 'var(--primary)', borderRadius: '50%', position: 'absolute', left: '-26px', top: '5px' }}></div>
+                            <strong>10:30 AM</strong>
+                            <p className="text-muted" style={{ fontSize: '0.85rem' }}>Returned to Home</p>
+                        </div>
+                        <div style={{ marginBottom: '1rem', position: 'relative' }}>
+                            <div style={{ width: '10px', height: '10px', background: 'var(--warning)', borderRadius: '50%', position: 'absolute', left: '-26px', top: '5px' }}></div>
+                            <strong>09:15 AM</strong>
+                            <p className="text-muted" style={{ fontSize: '0.85rem' }}>Pharmacy (1.2km away)</p>
+                        </div>
+                        <div style={{ position: 'relative' }}>
+                            <div style={{ width: '10px', height: '10px', background: 'var(--success)', borderRadius: '50%', position: 'absolute', left: '-26px', top: '5px' }}></div>
+                            <strong>08:00 AM</strong>
+                            <p className="text-muted" style={{ fontSize: '0.85rem' }}>Home</p>
+                        </div>
+                    </div>
                 </div>
-                <div style={{ position: 'relative' }}>
-                    <div style={{ width: '10px', height: '10px', background: 'var(--success)', borderRadius: '50%', position: 'absolute', left: '-26px', top: '5px' }}></div>
-                    <strong>08:00 AM</strong>
-                    <p className="text-muted" style={{ fontSize: '0.85rem' }}>Home</p>
-                </div>
-            </div>
+            )}
         </div>
       </div>
     </div>

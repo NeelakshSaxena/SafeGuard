@@ -16,6 +16,30 @@ const Analytics = () => {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
+  const handleExportCSV = () => {
+    if (!data) return;
+    
+    // Create CSV content from compliance and risk data
+    const headers = ['Day,Compliance_Pct,Risk_Score\n'];
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    
+    const rows = days.map((day, idx) => {
+        return `${day},${data.compliance[idx]},${data.risk_trend[idx]}\n`;
+    });
+    
+    const csvContent = headers.concat(rows).join('');
+    
+    // Create and trigger download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'analytics_export.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   useEffect(() => {
     fetch(`${API_BASE}/analytics/mock`)
       .then(res => {
@@ -79,7 +103,7 @@ const Analytics = () => {
     <div>
       <div className="d-flex justify-between align-center mb-2">
         <h2 className="d-flex align-center gap-1"><PieChartIcon className="text-primary" /> Analytics & Trends</h2>
-        <button className="btn btn-outline btn-sm"><Download size={16} /> Export CSV</button>
+        <button className="btn btn-outline btn-sm" onClick={handleExportCSV}><Download size={16} /> Export CSV</button>
       </div>
       
       <div className="grid-2 mb-2">

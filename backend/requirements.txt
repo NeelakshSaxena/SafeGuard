@@ -1,5 +1,5 @@
 fastapi
-uvicorn
+uvicorn[standard]
 sqlalchemy
 pydantic
 python-dotenv
@@ -7,7 +7,6 @@ psycopg2-binary
 pyjwt
 slowapi
 passlib
-pytest
 pytest
 pytest-asyncio
 python-socketio
