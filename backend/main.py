@@ -36,9 +36,18 @@ class User(Base):
 class Elderly(Base):
     __tablename__ = "elderly"
     elder_id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"))
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
     name = Column(String)
     status = Column(String, default="Safe")
+    adherence_pct = Column(Integer, default=100)
+    last_checkin = Column(String, nullable=True)
+    login_id = Column(String, unique=True, nullable=True) # e.g. "patient1"
+
+class DoctorPatientLink(Base):
+    __tablename__ = "doctor_patient_links"
+    link_id = Column(Integer, primary_key=True, index=True)
+    doctor_login_id = Column(String) # e.g. "doctor1"
+    elder_id = Column(Integer, ForeignKey("elderly.elder_id"))
 
 class CheckIn(Base):
     __tablename__ = "check_in"
@@ -159,6 +168,39 @@ def seed_data():
                 Consultation(doctor_name="Dr. Sharma", specialty="Cardiologist", scheduled_at="Oct 8, 3:00 PM", status="Upcoming", notes="Cardiology follow-up"),
             ])
             db.commit()
+            
+        # Seed patients
+        if db.query(Elderly).count() == 0:
+            p1 = Elderly(name="Alice Smith", status="Safe", adherence_pct=95, last_checkin="2024-10-07 10:45:00", login_id="patient1")
+            p2 = Elderly(name="Bob Jones", status="Warning", adherence_pct=78, last_checkin="2024-10-07 09:15:00", login_id="patient2")
+            p3 = Elderly(name="Carol White", status="Danger", adherence_pct=40, last_checkin=None, login_id="patient3")
+            p4 = Elderly(name="David Miller", status="Safe", adherence_pct=88, last_checkin="2024-10-07 08:00:00", login_id="patient4")
+            db.add_all([p1, p2, p3, p4])
+            db.commit()
+            
+            # Seed doctor-patient links
+            # doctor1 (Dr. Patel) assigned to patient1, patient2
+            db.add_all([
+                DoctorPatientLink(doctor_login_id="doctor1", elder_id=p1.elder_id),
+                DoctorPatientLink(doctor_login_id="doctor1", elder_id=p2.elder_id),
+                DoctorPatientLink(doctor_login_id="doctor1", elder_id=p3.elder_id),
+                # doctor2 (Dr. Sharma) assigned to patient2, patient3, patient4
+                DoctorPatientLink(doctor_login_id="doctor2", elder_id=p2.elder_id),
+                DoctorPatientLink(doctor_login_id="doctor2", elder_id=p3.elder_id),
+                DoctorPatientLink(doctor_login_id="doctor2", elder_id=p4.elder_id),
+            ])
+            db.commit()
+
+            # Seed some initial messages
+            db.add_all([
+                Message(sender="patient1", recipient="Alice Smith", body="Hello Alice!"),
+                Message(sender="patient1", recipient="doctor1", body="Hi Dr. Patel, feeling a bit dizzy today."),
+                Message(sender="doctor1", recipient="patient1", body="Please monitor your blood pressure and rest."),
+                Message(sender="patient2", recipient="doctor2", body="Dr. Sharma, can I reschedule my appointment?"),
+                Message(sender="doctor2", recipient="patient2", body="Yes, please use the booking tool."),
+            ])
+            db.commit()
+            
     finally:
         db.close()
 
@@ -262,30 +304,140 @@ async def submit_checkin(req: CheckInSchema, db: Session = Depends(get_db)):
     return {"message": "Check-in logged and broadcasted"}
 
 @app.get("/api/elderly")
-def get_elderly(db: Session = Depends(get_db)):
-    # Return mock data expected by app.js
+def get_elderly(doctor_id: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(Elderly)
+    if doctor_id:
+        # Get elder_ids linked to this doctor
+        linked = db.query(DoctorPatientLink.elder_id).filter(DoctorPatientLink.doctor_login_id == doctor_id).all()
+        linked_ids = [l[0] for l in linked]
+        query = query.filter(Elderly.elder_id.in_(linked_ids))
+    
+    patients = query.all()
     return [
-        {"elder_id": 1, "name": "Alice Smith", "status": "Safe", "last_checkin": "2024-10-07 10:45:00", "adherence_pct": 95},
-        {"elder_id": 2, "name": "Bob Jones", "status": "Warning", "last_checkin": "2024-10-07 09:15:00", "adherence_pct": 78},
-        {"elder_id": 3, "name": "Carol White", "status": "Danger", "last_checkin": None, "adherence_pct": 40}
+        {
+            "elder_id": p.elder_id,
+            "name": p.name,
+            "status": p.status,
+            "last_checkin": p.last_checkin,
+            "adherence_pct": p.adherence_pct,
+            "login_id": p.login_id
+        } for p in patients
     ]
 
 @app.get("/api/alerts")
-def get_alerts(db: Session = Depends(get_db)):
+def get_alerts(doctor_id: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(Alert, Elderly).join(Elderly, Alert.elder_id == Elderly.elder_id)
+    if doctor_id:
+        query = query.join(DoctorPatientLink, Elderly.elder_id == DoctorPatientLink.elder_id).filter(DoctorPatientLink.doctor_login_id == doctor_id)
+    
+    results = query.order_by(Alert.timestamp.desc()).all()
+    
     return [
-        {"alert_id": 1, "alert_type": "Fall Detected", "elderly_name": "Carol White", "severity": "Critical", "status": "Pending", "timestamp": "2024-10-07 10:05:00"},
-        {"alert_id": 2, "alert_type": "Missed Medication", "elderly_name": "Bob Jones", "severity": "Warning", "status": "Pending", "timestamp": "2024-10-07 09:30:00"}
+        {
+            "alert_id": alert.alert_id,
+            "alert_type": alert.alert_type,
+            "elderly_name": elderly.name,
+            "severity": alert.severity,
+            "status": alert.status,
+            "timestamp": alert.timestamp.strftime("%Y-%m-%d %H:%M:%S") if alert.timestamp else ""
+        }
+        for alert, elderly in results
     ]
 
 @app.post("/api/alerts/{id}/acknowledge")
 def ack_alert(id: int, db: Session = Depends(get_db)):
-    return {"success": True}
+    alert = db.query(Alert).filter(Alert.alert_id == id).first()
+    if alert:
+        alert.status = "Resolved"
+        db.commit()
+        return {"success": True}
+    return {"success": False, "error": "Alert not found"}
 
 @app.get("/api/analytics/mock")
-def get_analytics():
+def get_analytics(doctor_id: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(Elderly)
+    if doctor_id:
+        query = query.join(DoctorPatientLink, Elderly.elder_id == DoctorPatientLink.elder_id).filter(DoctorPatientLink.doctor_login_id == doctor_id)
+    patients = query.all()
+    
+    if not patients:
+        return {
+            "compliance": [0]*7,
+            "risk_trend": [0]*7,
+            "adherence": [0,0,0],
+            "alerts_heatmap": [0]*7
+        }
+    
+    avg_adherence = sum([p.adherence_pct for p in patients]) / len(patients)
+    # Generate somewhat realistic looking data around the average adherence
+    compliance_trend = [max(0, min(100, int(avg_adherence + (i-3)*2))) for i in range(7)]
+    
+    risk_trend = [max(0, min(100, 100 - c + 5)) for c in compliance_trend]
+    
+    safe_cnt = len([p for p in patients if p.adherence_pct >= 90])
+    warn_cnt = len([p for p in patients if 75 <= p.adherence_pct < 90])
+    crit_cnt = len([p for p in patients if p.adherence_pct < 75])
+    
     return {
-        "compliance": [95, 92, 88, 90, 85, 96, 91],
-        "risk_trend": [12, 14, 18, 15, 22, 19, 13]
+        "compliance": compliance_trend,
+        "risk_trend": risk_trend,
+        "adherence": [safe_cnt, warn_cnt, crit_cnt],
+        "alerts_heatmap": [len(patients)]*7 # Mock data
+    }
+
+@app.get("/api/ai-insights")
+def get_ai_insights(doctor_id: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(Elderly)
+    if doctor_id:
+        query = query.join(DoctorPatientLink, Elderly.elder_id == DoctorPatientLink.elder_id).filter(DoctorPatientLink.doctor_login_id == doctor_id)
+    patients = query.all()
+    
+    if not patients:
+        return {"predictions": [], "anomalies": []}
+        
+    predictions = []
+    anomalies = []
+    
+    for p in patients:
+        if p.status == "Danger" or p.adherence_pct < 60:
+            predictions.append({
+                "type": "Fall Risk Prediction",
+                "patient": p.name,
+                "percentage": "85%",
+                "reason": "Irregular heart rate, recent missed meds",
+                "recommendation": "Urgent physical evaluation required.",
+                "severity": "danger"
+            })
+        elif p.status == "Warning" or 60 <= p.adherence_pct < 85:
+            predictions.append({
+                "type": "Medication Adherence Forecast",
+                "patient": p.name,
+                "percentage": f"{p.adherence_pct - 10}%",
+                "reason": "Pattern of missing evening doses",
+                "recommendation": "Adjust reminder schedule to 8 PM.",
+                "severity": "warning"
+            })
+            
+        if p.status == "Danger":
+            anomalies.append({
+                "type": "Cardiac Anomaly",
+                "patient": p.name,
+                "description": f"{p.name}'s HR spiked to 115 bpm (normally 75)",
+                "action": "Alert Doctor",
+                "severity": "danger"
+            })
+        elif p.status == "Warning":
+            anomalies.append({
+                "type": "Sleep Pattern Anomaly",
+                "patient": p.name,
+                "description": f"{p.name}'s sleep dropped 40% over 2 days",
+                "action": "Check-in",
+                "severity": "warning"
+            })
+
+    return {
+        "predictions": predictions[:2],  # Limit to top 2
+        "anomalies": anomalies[:3]
     }
 
 @app.get("/api/db/stats")

@@ -1,6 +1,7 @@
 const API_BASE = 'http://127.0.0.1:5000/api';
 let globalElderlyData = [];
 let currentRole = '';
+let currentUserId = '';
 
 // --- Initialization & UI Logic ---
 document.addEventListener('DOMContentLoaded', () => {
@@ -9,9 +10,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Check role in localStorage
     const savedRole = localStorage.getItem('safeguard_role');
-    if (savedRole) {
+    const savedUserId = localStorage.getItem('safeguard_userid');
+    if (savedRole && savedUserId) {
         document.getElementById('loginScreen').style.display = 'none';
         currentRole = savedRole;
+        currentUserId = savedUserId;
         changeRole(true); // initialized
     } else {
         document.getElementById('loginScreen').style.display = 'flex';
@@ -33,14 +36,19 @@ function handleLogin(e) {
         return;
     }
     
+    
     localStorage.setItem('safeguard_role', currentRole);
+    localStorage.setItem('safeguard_userid', loginId);
+    currentUserId = loginId;
     document.getElementById('loginScreen').style.display = 'none';
     changeRole(true);
 }
 
 function handleLogout() {
     localStorage.removeItem('safeguard_role');
+    localStorage.removeItem('safeguard_userid');
     currentRole = '';
+    currentUserId = '';
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('loginId').value = '';
     document.getElementById('loginPass').value = '';
@@ -58,7 +66,7 @@ function changeRole(isInit = false) {
     const label = document.getElementById('currentUserLabel');
     if(role === 'caregiver') label.innerText = 'Caregiver View';
     if(role === 'elderly') label.innerText = 'Patient View';
-    if(role === 'doctor') label.innerText = 'Dr. Patel (Clinical)';
+    if(role === 'doctor') label.innerText = `Doctor View (${currentUserId})`;
     
     // Hide all nav groups
     document.querySelectorAll('.nav-group').forEach(el => el.style.display = 'none');
@@ -97,8 +105,24 @@ function switchTab(tabId) {
     if (tabId === 'analytics') fetchAnalytics();
     if (tabId === 'dbviz') fetchDbStats();
     if (tabId === 'clinical') fetchClinicalData();
+    if (tabId === 'ai-insights') fetchAiInsights();
+    if (tabId === 'live-location') loadLiveLocation();
+    if (tabId === 'facilities') loadFacilities();
+    // Telehealth - role-aware
+    if (tabId === 'telehealth') {
+        const doctorView = document.getElementById('telehealthDoctorView');
+        const patientView = document.getElementById('telehealthPatientView');
+        if (currentRole === 'doctor') {
+            if (doctorView) doctorView.style.display = 'block';
+            if (patientView) patientView.style.display = 'none';
+            loadDoctorConsultations();
+        } else {
+            if (doctorView) doctorView.style.display = 'none';
+            if (patientView) patientView.style.display = 'block';
+            loadConsultations();
+        }
+    }
     // Patient view tabs
-    if (tabId === 'telehealth') loadConsultations();
     if (tabId === 'prescriptions') loadRefills();
     if (tabId === 'wearables') loadDevices();
     if (tabId === 'my-profile') loadProfile();
@@ -114,9 +138,9 @@ function openSidebar(elderId) {
     
     const content = `
         <h2 style="margin-bottom: 0.5rem; color: ${color};">${patient.name}</h2>
-        <p class="text-muted" style="margin-bottom: 1.5rem;">Age: 76 | DOB: ${patient.dob}</p>
+        <p class="text-muted" style="margin-bottom: 1.5rem;">Age: 76 | DOB: ${patient.dob || 'Jan 15, 1948'}</p>
         
-        <div style="background: rgba(0,0,0,0.02); padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border); margin-bottom: 1.5rem;">
+        <div style="background: rgba(255,255,255,0.02); padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border); margin-bottom: 1.5rem;">
             <h4 class="mb-1 text-muted" style="text-transform:uppercase; font-size: 0.75rem;">Real-time Status</h4>
             <div class="d-flex justify-between mb-1">
                 <span>Status:</span>
@@ -139,8 +163,8 @@ function openSidebar(elderId) {
         <p style="font-size: 0.875rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-user-check text-primary"></i> Mom (Primary) - Active</p>
         <p style="font-size: 0.875rem; margin-bottom: 1.5rem;"><i class="fa-solid fa-user-md text-primary"></i> Dr. Patel - Clinical</p>
         
-        <button class="btn btn-outline" style="width: 100%; justify-content: center; margin-bottom: 0.5rem;" onclick="openSidebarMessage('${patient.name}')"><i class="fa-solid fa-message"></i> Send Message</button>
-        <button class="btn btn-danger" style="width: 100%; justify-content: center;" onclick="triggerEmergencyResponse('${patient.name}')"><i class="fa-solid fa-exclamation-triangle"></i> Trigger Emergency Alert</button>
+        <button class="btn btn-outline" style="width: 100%; justify-content: center; margin-bottom: 0.5rem;" onclick="openMessageModal('${patient.login_id}')">Send Message</button>
+        <button class="btn btn-danger" style="width: 100%; justify-content: center;" onclick="alert('Emergency alert triggered for ${patient.name}!')">Trigger Emergency Alert</button>
     `;
     
     document.getElementById('patientDetailsContent').innerHTML = content;
@@ -213,105 +237,110 @@ async function fetchDashboardStats() {
     } catch (err) { console.error("API Offline", err); }
 }
 
-
-window.dashFilter = 'All';
-window.dashSearch = '';
-
 async function fetchElderlyCards() {
     try {
         const res = await fetch(`${API_BASE}/elderly`);
         globalElderlyData = await res.json();
-        renderElderlyCards();
+        const grid = document.getElementById('elderlyCardsGrid');
+        grid.innerHTML = '';
+        
+        globalElderlyData.forEach(e => {
+            const timeDiff = e.last_checkin ? `<span class="text-muted"><i class="fa-regular fa-clock"></i> ${e.last_checkin.split(' ')[1]}</span>` : '<span class="text-danger">No check-ins</span>';
+            const color = e.status === 'Safe' ? 'var(--success)' : e.status === 'Warning' ? 'var(--warning)' : 'var(--danger)';
+            const icon = e.status === 'Safe' ? 'fa-check-circle' : e.status === 'Warning' ? 'fa-circle-exclamation' : 'fa-triangle-exclamation';
+            const risk = 100 - e.adherence_pct;
+            
+            grid.innerHTML += `
+                <div class="card card-interactive" style="border-left: 4px solid ${color}" onclick="openSidebar(${e.elder_id})">
+                    <div class="d-flex justify-between align-center mb-1">
+                        <h3 style="margin:0; font-size: 1.1rem;">${e.name}</h3>
+                        <span style="color: ${color}; font-size: 0.75rem; font-weight: 600; padding: 2px 6px; background: rgba(255,255,255,0.05); border-radius: 10px;"><i class="fa-solid ${icon}"></i> ${e.status}</span>
+                    </div>
+                    
+                    <div class="text-muted" style="font-size: 0.8rem; margin-bottom: 0.5rem;">Age: 76 | Risk Score: <span style="color: ${risk > 40 ? 'var(--danger)' : 'var(--success)'}">${risk}</span></div>
+                    
+                    <p style="font-size: 0.85rem; margin-bottom: 1rem; display: flex; justify-content: space-between;">
+                        ${timeDiff}
+                        <span style="color: var(--primary);"><i class="fa-solid fa-location-dot"></i> Home</span>
+                    </p>
+                    
+                    <div style="background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+                        <span>Adherence</span>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; width: 60%;">
+                            <div style="flex:1; height: 4px; background: var(--bg); border-radius: 2px;">
+                                <div style="height: 100%; width: ${e.adherence_pct}%; background: ${e.adherence_pct > 80 ? 'var(--success)' : 'var(--warning)'}; border-radius: 2px;"></div>
+                            </div>
+                            <span style="color: ${e.adherence_pct > 80 ? 'var(--success)' : 'var(--warning)'}">${e.adherence_pct}%</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
     } catch (e) { console.error(e); }
 }
 
-function renderElderlyCards() {
-    const grid = document.getElementById('elderlyCardsGrid');
-    if (!grid) return;
-    grid.innerHTML = '';
-    
-    let filtered = globalElderlyData.filter(e => {
-        if (window.dashSearch && !e.name.toLowerCase().includes(window.dashSearch)) return false;
-        if (window.dashFilter === 'Alerts Only' && e.status !== 'Danger' && e.status !== 'Alert') return false;
-        if (window.dashFilter === 'At Risk' && e.status !== 'Warning' && e.status !== 'Danger' && e.status !== 'Alert') return false;
-        if (window.dashFilter === 'Low Adherence' && e.adherence_pct >= 80) return false;
-        return true;
-    });
-
-    filtered.forEach(e => {
-        const timeDiff = e.last_checkin ? `<span class="text-muted"><i class="fa-regular fa-clock"></i> ${e.last_checkin.split(' ')[1]}</span>` : '<span class="text-danger">No check-ins</span>';
-        const color = e.status === 'Safe' ? 'var(--success)' : e.status === 'Warning' ? 'var(--warning)' : 'var(--danger)';
-        const icon = e.status === 'Safe' ? 'fa-check-circle' : e.status === 'Warning' ? 'fa-circle-exclamation' : 'fa-triangle-exclamation';
-        const risk = 100 - e.adherence_pct;
-        
-        grid.innerHTML += `
-            <div class="card card-interactive" style="border-left: 4px solid ${color}" onclick="openSidebar(${e.elder_id})">
-                <div class="d-flex justify-between align-center mb-1">
-                    <h3 style="margin:0; font-size: 1.1rem;">${e.name}</h3>
-                    <span style="color: ${color}; font-size: 0.75rem; font-weight: 600; padding: 2px 6px; background: rgba(0,0,0,0.05); border-radius: 10px;"><i class="fa-solid ${icon}"></i> ${e.status}</span>
-                </div>
-                
-                <div class="text-muted" style="font-size: 0.8rem; margin-bottom: 0.5rem;">Age: 76 | Risk Score: <span style="color: ${risk > 40 ? 'var(--danger)' : 'var(--success)'}">${risk}</span></div>
-                
-                <p style="font-size: 0.85rem; margin-bottom: 1rem; display: flex; justify-content: space-between;">
-                    ${timeDiff}
-                    <span style="color: var(--primary);"><i class="fa-solid fa-location-dot"></i> Home</span>
-                </p>
-                
-                <div style="background: rgba(0,0,0,0.03); padding: 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
-                    <span>Adherence</span>
-                    <div style="display: flex; align-items: center; gap: 0.5rem; width: 60%;">
-                        <div style="flex:1; height: 4px; background: var(--bg); border-radius: 2px;">
-                            <div style="height: 100%; width: ${e.adherence_pct}%; background: ${e.adherence_pct > 80 ? 'var(--success)' : 'var(--warning)'}; border-radius: 2px;"></div>
-                        </div>
-                        <span style="color: ${e.adherence_pct > 80 ? 'var(--success)' : 'var(--warning)'}">${e.adherence_pct}%</span>
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-}
-
-
-
-window.alertFilter = 'Pending';
-window.globalAlertsData = [];
+let currentAlertFilter = 'Pending';
+let globalAlertsData = [];
 
 async function fetchAlerts() {
     try {
-        const res = await fetch(`${API_BASE}/alerts`);
-        window.globalAlertsData = await res.json();
-        renderAlerts();
+        let url = `${API_BASE}/alerts`;
+        if (currentRole === 'doctor') {
+            url += `?doctor_id=${currentUserId}`;
+        }
+        const res = await fetch(url);
+        globalAlertsData = await res.json();
+        renderAlertsTable();
     } catch (e) { console.error(e); }
 }
 
-function renderAlerts() {
+function setAlertFilter(filter) {
+    currentAlertFilter = filter;
+    const chips = document.querySelectorAll('#alertsFilterBar .chip');
+    chips.forEach(c => c.classList.remove('active'));
+    
+    // Find the chip with matching text and make it active
+    Array.from(chips).forEach(c => {
+        if (c.innerText === filter) {
+            c.classList.add('active');
+        }
+    });
+    renderAlertsTable();
+}
+
+function renderAlertsTable() {
     const tbody = document.getElementById('alertsTableBody');
-    if(!tbody) return;
+    if (!tbody) return;
     tbody.innerHTML = '';
     
-    let filtered = window.globalAlertsData.filter(a => {
-        if (window.alertFilter === 'Pending' && a.status !== 'Pending') return false;
-        if (window.alertFilter === 'Acknowledged' && a.status !== 'Acknowledged') return false;
-        if (window.alertFilter === 'Resolved' && a.status !== 'Resolved') return false;
-        return true;
-    });
-
-    filtered.forEach(a => {
+    let filteredAlerts = globalAlertsData;
+    if (currentAlertFilter !== 'All') {
+        filteredAlerts = globalAlertsData.filter(a => a.status === currentAlertFilter);
+    }
+    
+    if (filteredAlerts.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-muted" style="text-align:center;padding:2rem;">No ${currentAlertFilter.toLowerCase()} alerts.</td></tr>`;
+        return;
+    }
+    
+    filteredAlerts.forEach(a => {
         const color = a.severity === 'Critical' ? 'var(--danger)' : 'var(--warning)';
         const statusColor = a.status === 'Pending' ? 'var(--danger)' : 'var(--success)';
         
         const encoded = encodeURIComponent(JSON.stringify(a));
         const actionBtn = a.status === 'Pending' 
             ? `<button class="btn btn-outline btn-sm" onclick="openAlertModal('${encoded}')">Details</button> <button class="btn btn-success btn-sm" onclick="ackAlert(${a.alert_id})">Ack</button>` 
-            : `<span class="text-muted"><i class="fa-solid fa-check"></i> ${a.status}</span>`;
+            : `<span class="text-muted"><i class="fa-solid fa-check"></i> Resolved</span>`;
+        
+        // Handle split gracefully in case timestamp doesn't have a space
+        const timeStr = a.timestamp.includes(' ') ? a.timestamp.split(' ')[1] : a.timestamp;
         
         tbody.innerHTML += `
             <tr>
                 <td style="color: ${color}; font-weight: bold;"><i class="fa-solid fa-circle" style="font-size:0.5rem; margin-right:0.5rem;"></i>${a.severity}</td>
                 <td>${a.alert_type}</td>
                 <td style="font-weight: 500;">${a.elderly_name}</td>
-                <td class="text-muted">${a.timestamp.split(' ')[1]}</td>
+                <td class="text-muted">${timeStr}</td>
                 <td style="color: ${statusColor}; font-weight: 500;">${a.status}</td>
                 <td>${actionBtn}</td>
             </tr>
@@ -322,31 +351,39 @@ function renderAlerts() {
 async function ackAlert(id) {
     try {
         await fetch(`${API_BASE}/alerts/${id}/acknowledge`, {method: 'POST'});
-        const alert = window.globalAlertsData.find(a => a.alert_id === id);
-        if (alert) alert.status = 'Acknowledged';
-        showToast('Alert Acknowledged', 'success');
-        renderAlerts();
+        showToast('Alert acknowledged', 'success');
+        fetchAlerts();
         fetchDashboardStats();
     } catch (e) { console.error(e); }
 }
 
-function ackAllAlerts() {
-    if(window.globalAlertsData) {
-        window.globalAlertsData.forEach(a => {
-            if(a.status === 'Pending') a.status = 'Acknowledged';
-        });
-    }
-    showToast('All pending alerts acknowledged', 'success');
-    renderAlerts();
+async function ackAllAlerts() {
+    try {
+        const pendingAlerts = globalAlertsData.filter(a => a.status === 'Pending');
+        if (pendingAlerts.length === 0) {
+            showToast('No pending alerts to acknowledge', 'success');
+            return;
+        }
+        
+        for (const alert of pendingAlerts) {
+            await fetch(`${API_BASE}/alerts/${alert.alert_id}/acknowledge`, {method: 'POST'});
+        }
+        showToast('All alerts acknowledged', 'success');
+        fetchAlerts();
+        fetchDashboardStats();
+    } catch (e) { console.error(e); }
 }
-
 
 // --- Analytics Charts ---
 let charts = {};
 
 async function fetchAnalytics() {
     try {
-        const res = await fetch(`${API_BASE}/analytics/mock`);
+        let url = `${API_BASE}/analytics/mock`;
+        if (currentRole === 'doctor') {
+            url += `?doctor_id=${currentUserId}`;
+        }
+        const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
         
@@ -374,7 +411,7 @@ async function fetchAnalytics() {
         if (charts.adherence) charts.adherence.destroy();
         charts.adherence = new Chart(c3, {
             type: 'doughnut',
-            data: { labels: ['>90% (Safe)', '75-90% (Warning)', '<75% (Critical)'], datasets: [{ data: [25, 15, 10], backgroundColor: ['#10B981', '#F59E0B', '#EF4444'], borderWidth: 0 }] },
+            data: { labels: ['>90% (Safe)', '75-90% (Warning)', '<75% (Critical)'], datasets: [{ data: data.adherence, backgroundColor: ['#10B981', '#F59E0B', '#EF4444'], borderWidth: 0 }] },
             options: { responsive: true, cutout: '70%', plugins: { legend: { position: 'right', labels: { color: '#94A3B8' } } } }
         });
         
@@ -382,44 +419,309 @@ async function fetchAnalytics() {
         if (charts.heatmap) charts.heatmap.destroy();
         charts.heatmap = new Chart(c4, {
             type: 'line',
-            data: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], datasets: [{ label: 'Alert Frequency', data: [2, 5, 1, 8, 3, 2, 0], borderColor: '#EF4444', backgroundColor: 'rgba(239, 68, 68, 0.2)', fill: true, stepped: true }] },
+            data: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], datasets: [{ label: 'Alert Frequency', data: data.alerts_heatmap, borderColor: '#EF4444', backgroundColor: 'rgba(239, 68, 68, 0.2)', fill: true, stepped: true }] },
             options: { responsive: true, plugins: { legend: { display: false } } }
         });
         
     } catch (e) { 
         console.error("Analytics Fetch Error: ", e); 
         const errorBox = document.createElement('div');
-        errorBox.style = "background: #EF4444; color: var(--text-main); padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;";
+        errorBox.style = "background: #EF4444; color: white; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;";
         errorBox.innerHTML = `<strong>Error Rendering Charts:</strong><br><pre>${e.message}</pre>`;
         const container = document.getElementById('complianceChart').parentElement;
         container.appendChild(errorBox);
     }
 }
 
+async function fetchAiInsights() {
+    try {
+        let url = `${API_BASE}/ai-insights`;
+        if (currentRole === 'doctor') {
+            url += `?doctor_id=${currentUserId}`;
+        }
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        const aiContainer = document.querySelector('#ai-insights .grid-2');
+        if (!aiContainer) return;
+        
+        aiContainer.innerHTML = '';
+        if (data.predictions.length === 0) {
+            aiContainer.innerHTML = '<div class="card"><p class="text-muted">No high-risk predictions found for your patients.</p></div>';
+        } else {
+            data.predictions.forEach(p => {
+                const border = p.severity === 'danger' ? 'var(--danger)' : 'var(--warning)';
+                const textColor = p.severity === 'danger' ? 'text-danger' : 'text-warning';
+                const bg = p.severity === 'danger' ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)';
+                
+                aiContainer.innerHTML += `
+                    <div class="card" style="border-top: 4px solid ${border};">
+                        <h3 class="mb-1">${p.type}</h3>
+                        <p class="${textColor}" style="font-size: 2rem; font-weight: bold; margin: 0;">${p.percentage} <span style="font-size: 1rem; font-weight: normal;" class="text-muted">${p.patient}</span></p>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Based on: ${p.reason}</p>
+                        <div style="background: ${bg}; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                            <h4 class="${textColor}" style="margin: 0 0 0.5rem 0;">Recommendation</h4>
+                            <p style="margin: 0; font-size: 0.9rem;">${p.recommendation}</p>
+                        </div>
+                        <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;">Review Details</button>
+                    </div>
+                `;
+            });
+        }
+        
+        const anomalyTable = document.querySelector('#ai-insights table');
+        if (anomalyTable) {
+            anomalyTable.innerHTML = '';
+            if (data.anomalies.length === 0) {
+                anomalyTable.innerHTML = '<tr><td class="text-muted" style="padding:1rem 0;">No active anomalies detected.</td></tr>';
+            } else {
+                data.anomalies.forEach(a => {
+                    const icon = a.type.includes('Cardiac') ? 'fa-heart-crack' : 'fa-bed';
+                    const textColor = a.severity === 'danger' ? 'text-danger' : 'text-warning';
+                    const btnClass = a.severity === 'danger' ? 'btn-danger' : 'btn-outline';
+                    
+                    anomalyTable.innerHTML += `
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <td style="padding: 1rem 0;"><span class="${textColor}"><i class="fa-solid ${icon}"></i> ${a.type}</span></td>
+                            <td class="text-muted">${a.description}</td>
+                            <td><button class="btn btn-sm ${btnClass}">${a.action}</button></td>
+                        </tr>
+                    `;
+                });
+            }
+        }
+        
+    } catch (e) {
+        console.error("AI Insights Error:", e);
+    }
+}
+
+// --- Live Location ---
+async function loadLiveLocation() {
+    const patientSelect = document.getElementById('locationPatientSelect');
+    if (!patientSelect) return;
+    
+    if (currentRole === 'doctor') {
+        patientSelect.style.display = 'block';
+        try {
+            const res = await fetch(`${API_BASE}/elderly?doctor_id=${currentUserId}`);
+            const patients = await res.json();
+            
+            // Populate select dropdown
+            patientSelect.innerHTML = '<option value="">Select Patient...</option>';
+            patients.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.elder_id;
+                opt.innerText = p.name;
+                patientSelect.appendChild(opt);
+            });
+            
+            // Clear default view
+            renderLiveLocation('');
+        } catch(e) { console.error("Error loading location patients", e); }
+    } else {
+        patientSelect.style.display = 'none';
+        renderLiveLocation('self'); // Mock self data for patient/caregiver
+    }
+}
+
+function renderLiveLocation(patientId) {
+    const mapContent = document.getElementById('locationMapContent');
+    const currentStatus = document.getElementById('locationCurrentStatus');
+    const lastUpdated = document.getElementById('locationLastUpdated');
+    const eventsList = document.getElementById('locationEventsList');
+    
+    if (!patientId) {
+        mapContent.innerHTML = '<p class="text-muted">Select a patient to view location.</p>';
+        currentStatus.innerHTML = '<i class="fa-solid fa-circle-question"></i> Unknown';
+        currentStatus.className = 'text-muted';
+        lastUpdated.innerText = 'Last updated: -';
+        eventsList.innerHTML = '<p class="text-muted" style="font-size:0.85rem;">No recent events.</p>';
+        return;
+    }
+    
+    // In a real app we'd fetch location data by patientId. 
+    // Here we generate dynamic mock data based on the ID.
+    const isHome = patientId % 2 === 0 || patientId === 'self';
+    
+    mapContent.innerHTML = `
+        <div style="width: 200px; height: 200px; border-radius: 50%; border: 2px dashed ${isHome ? 'var(--success)' : 'var(--warning)'}; background: ${isHome ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)'}; display: flex; align-items: center; justify-content: center; margin: 0 auto; position: relative;">
+            <i class="fa-solid ${isHome ? 'fa-house' : 'fa-building-columns'}" style="position: absolute; top: 20px; color: ${isHome ? 'var(--success)' : 'var(--warning)'}; font-size: 1.5rem;"></i>
+            <div style="width: 15px; height: 15px; background: var(--primary); border-radius: 50%; border: 2px solid white; box-shadow: 0 0 10px var(--primary); position: absolute; top: 50%; left: ${isHome ? '50%' : '60%'}; transform: translate(-50%, -50%);"></div>
+        </div>
+        <p class="mt-2" style="margin-top: 1rem; font-weight: bold;">📍 Safe Zone: ${isHome ? 'Home' : 'Community Center'}</p>
+    `;
+    
+    currentStatus.innerHTML = isHome 
+        ? '<i class="fa-solid fa-check-circle"></i> At Home'
+        : '<i class="fa-solid fa-person-walking"></i> In Transit / Away';
+    currentStatus.className = isHome ? 'text-success' : 'text-warning';
+    
+    lastUpdated.innerText = `Last updated: Just now | Accuracy: ${isHome ? '15m' : '35m'}`;
+    
+    eventsList.innerHTML = isHome ? `
+        <div style="position: relative; margin-bottom: 1rem;">
+            <div style="position: absolute; left: -1.4rem; top: 0.25rem; width: 10px; height: 10px; background: var(--success); border-radius: 50%;"></div>
+            <p style="margin: 0; font-size: 0.9rem;">11:00 AM - Returned home</p>
+        </div>
+        <div style="position: relative; margin-bottom: 1rem;">
+            <div style="position: absolute; left: -1.4rem; top: 0.25rem; width: 10px; height: 10px; background: var(--text-muted); border-radius: 50%;"></div>
+            <p style="margin: 0; font-size: 0.9rem;">10:45 AM - Exited pharmacy</p>
+        </div>
+    ` : `
+        <div style="position: relative; margin-bottom: 1rem;">
+            <div style="position: absolute; left: -1.4rem; top: 0.25rem; width: 10px; height: 10px; background: var(--warning); border-radius: 50%;"></div>
+            <p style="margin: 0; font-size: 0.9rem;">12:30 PM - Arrived at Community Center</p>
+        </div>
+        <div style="position: relative; margin-bottom: 1rem;">
+            <div style="position: absolute; left: -1.4rem; top: 0.25rem; width: 10px; height: 10px; background: var(--text-muted); border-radius: 50%;"></div>
+            <p style="margin: 0; font-size: 0.9rem;">12:00 PM - Left home</p>
+        </div>
+    `;
+}
+
 // --- Doctor Clinical View ---
+let currentClinicalFilter = 'all';
+
 async function fetchClinicalData() {
     try {
-        const res = await fetch(`${API_BASE}/elderly`);
+        const res = await fetch(`${API_BASE}/elderly?doctor_id=${currentUserId}`);
         const elderly = await res.json();
+        globalElderlyData = elderly;
+
+        // Update stats cards
+        const countEl = document.getElementById('doctorPatientCount');
+        if (countEl) countEl.innerText = elderly.length;
+        const highRiskCount = elderly.filter(e => (100 - e.adherence_pct) > 40 || e.status === 'Danger').length;
+        const hrEl = document.getElementById('doctorHighRiskCount');
+        if (hrEl) hrEl.innerText = highRiskCount;
+
+        renderClinicalTable(currentClinicalFilter);
+        loadDoctorInbox();
+    } catch (e) { 
+        console.error('fetchClinicalData error:', e); 
         const tbody = document.getElementById('clinicalTableBody');
-        tbody.innerHTML = '';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-danger" style="text-align:center;padding:2rem;">Failed to load patients. Is the backend running on port 5000?</td></tr>';
+    }
+}
+
+async function loadDoctorInbox() {
+    const inbox = document.getElementById('doctorInbox');
+    if (!inbox) return;
+    try {
+        const res = await fetch(`${API_BASE}/messages`);
+        const msgs = await res.json();
+        // Filter messages relevant to this doctor (sent TO or FROM this doctor)
+        const doctorMsgs = msgs.filter(m => m.recipient === currentUserId || m.sender === currentUserId);
         
-        elderly.forEach(e => {
-            const color = e.status === 'Safe' ? 'var(--success)' : e.status === 'Warning' ? 'var(--warning)' : 'var(--danger)';
-            const risk = 100 - e.adherence_pct;
-            
-            tbody.innerHTML += `
-                <tr>
-                    <td style="font-weight: bold; color: var(--text-main);">${e.name}</td>
-                    <td class="text-muted">76</td>
-                    <td>Diabetes, HTN</td>
-                    <td style="color: ${e.adherence_pct > 80 ? 'var(--success)' : 'var(--warning)'};">${e.adherence_pct}%</td>
-                    <td style="color: ${risk > 40 ? 'var(--danger)' : 'var(--success)'};">${risk}</td>
-                    <td style="color: ${color};"><i class="fa-solid fa-circle" style="font-size: 0.5rem; margin-right: 0.5rem;"></i>${e.status}</td>
-                </tr>
+        // Update message count stat
+        const msgCountEl = document.getElementById('doctorMsgCount');
+        if (msgCountEl) msgCountEl.innerText = doctorMsgs.length;
+
+        if (doctorMsgs.length === 0) {
+            inbox.innerHTML = '<p class="text-muted" style="text-align:center;padding:1rem;">No messages from patients yet.</p>';
+            return;
+        }
+        inbox.innerHTML = '';
+        doctorMsgs.forEach(m => {
+            const isFromMe = m.sender === currentUserId;
+            const borderColor = isFromMe ? 'var(--primary)' : 'var(--success)';
+            const direction = isFromMe ? '→ Sent to' : '← From';
+            const otherParty = isFromMe ? m.recipient : m.sender;
+            inbox.innerHTML += `
+                <div style="border-left:3px solid ${borderColor};padding:0.75rem;margin-bottom:0.5rem;background:rgba(255,255,255,0.02);border-radius:0 0.25rem 0.25rem 0;">
+                    <div class="d-flex justify-between align-center" style="margin-bottom:0.25rem;">
+                        <strong style="font-size:0.9rem;">${direction} ${getFriendlyName(otherParty)}</strong>
+                        <span class="text-muted" style="font-size:0.75rem;">${m.timestamp}</span>
+                    </div>
+                    <p style="margin:0;font-size:0.85rem;color:var(--text-muted);">${m.body}</p>
+                    ${!isFromMe ? '<button class="btn btn-sm btn-outline" style="margin-top:0.5rem;" onclick="openMessageModal(\'' + otherParty + '\')"><i class="fa-solid fa-reply"></i> Reply</button>' : ''}
+                </div>
             `;
         });
-    } catch (e) { console.error(e); }
+    } catch(e) { 
+        console.error('loadDoctorInbox error:', e);
+        inbox.innerHTML = '<p class="text-muted">Failed to load messages.</p>'; 
+    }
+}
+
+async function loadDoctorConsultations() {
+    const container = document.getElementById('doctorConsultationsList');
+    if (!container) return;
+    try {
+        const res = await fetch(`${API_BASE}/consultations`);
+        const consults = await res.json();
+        if (consults.length === 0) {
+            container.innerHTML = '<p class="text-muted" style="text-align:center;padding:1rem;">No consultations scheduled yet.</p>';
+            return;
+        }
+        container.innerHTML = '';
+        consults.forEach(c => {
+            const isCompleted = c.status === 'Completed';
+            const borderColor = isCompleted ? 'var(--success)' : 'var(--warning)';
+            const statusIcon = isCompleted ? '<i class="fa-solid fa-check text-success"></i>' : '<i class="fa-regular fa-clock text-warning"></i>';
+            const statusLabel = isCompleted ? '<span class="text-success" style="font-size:0.85rem;">Completed</span>' : '<span class="chip">Upcoming</span>';
+            container.innerHTML += `
+                <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);padding:1rem;border-radius:0.5rem;margin-bottom:0.75rem;border-left:3px solid ${borderColor};">
+                    <div class="d-flex justify-between align-center mb-1">
+                        <strong>${statusIcon} ${c.scheduled_at} - ${getFriendlyName(c.doctor_name)}</strong>
+                        ${statusLabel}
+                    </div>
+                    <p class="text-muted" style="font-size:0.85rem;">${c.specialty}${c.notes ? ' – ' + c.notes : ''}</p>
+                </div>
+            `;
+        });
+    } catch(e) { 
+        console.error(e);
+        container.innerHTML = '<p class="text-muted">Failed to load consultations.</p>';
+    }
+}
+
+function renderClinicalTable(filterType = 'all') {
+    currentClinicalFilter = filterType;
+    
+    const chips = document.querySelectorAll('#clinical .filter-bar .chip');
+    if (chips.length > 0) {
+        chips.forEach(c => c.classList.remove('active'));
+        if(filterType === 'all') chips[0].classList.add('active');
+        else if(filterType === 'high-risk') chips[1].classList.add('active');
+        else if(filterType === 'review') chips[2].classList.add('active');
+    }
+
+    const tbody = document.getElementById('clinicalTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    let filteredData = globalElderlyData;
+    if (filterType === 'high-risk') {
+        filteredData = globalElderlyData.filter(e => (100 - e.adherence_pct) > 40 || e.status === 'Danger');
+    } else if (filterType === 'review') {
+        filteredData = globalElderlyData.filter(e => e.status !== 'Safe');
+    }
+
+    if (filteredData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-muted" style="text-align:center;padding:2rem;">No patients match this filter.</td></tr>';
+        return;
+    }
+    
+    filteredData.forEach(e => {
+        const color = e.status === 'Safe' ? 'var(--success)' : e.status === 'Warning' ? 'var(--warning)' : 'var(--danger)';
+        const risk = 100 - e.adherence_pct;
+        
+        tbody.innerHTML += `
+            <tr>
+                <td style="font-weight: bold; color: var(--text-main); cursor: pointer;" onclick="openSidebar(${e.elder_id})"><i class="fa-solid fa-user-circle"></i> ${e.name}</td>
+                <td class="text-muted">76</td>
+                <td>Diabetes, HTN</td>
+                <td style="color: ${e.adherence_pct > 80 ? 'var(--success)' : 'var(--warning)'};">${e.adherence_pct}%</td>
+                <td style="color: ${risk > 40 ? 'var(--danger)' : 'var(--success)'};">${risk}</td>
+                <td style="color: ${color};"><i class="fa-solid fa-circle" style="font-size: 0.5rem; margin-right: 0.5rem;"></i>${e.status}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline" onclick="openMessageModal('${e.login_id}')"><i class="fa-solid fa-message"></i> Msg</button>
+                </td>
+            </tr>
+        `;
+    });
 }
 
 // --- DB Visualizer Animation & Query ---
@@ -452,7 +754,7 @@ async function fetchDbStats() {
         data.history.forEach(h => {
             const timeColor = h.ms > 100 ? 'var(--warning)' : 'var(--success)';
             historyBox.innerHTML += `
-                <div style="background: rgba(0,0,0,0.05); padding: 0.75rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.8rem;">
+                <div style="background: rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.8rem;">
                     <div class="d-flex justify-between mb-1 text-muted">
                         <span>${h.time}</span>
                         <span style="color: ${timeColor}">${h.ms}ms ⚡</span>
@@ -608,7 +910,7 @@ window.addEventListener("message", (event) => {
         fetchDashboardStats();
         // Show a brief toast message in the legacy UI
         const toast = document.createElement('div');
-        toast.style = "position: fixed; bottom: 20px; right: 20px; background: var(--success); color: var(--text-main); padding: 1rem; border-radius: 0.5rem; z-index: 9999; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: opacity 0.5s;";
+        toast.style = "position: fixed; bottom: 20px; right: 20px; background: var(--success); color: white; padding: 1rem; border-radius: 0.5rem; z-index: 9999; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: opacity 0.5s;";
         toast.innerHTML = `<i class="fa-solid fa-location-dot"></i> Check-in updated for Elder ID: ${payload.elder_id}`;
         document.body.appendChild(toast);
         setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 500); }, 4000);
@@ -618,7 +920,7 @@ window.addEventListener("message", (event) => {
 function showToast(message, type = 'success') {
     const toast = document.createElement('div');
     const bgColor = type === 'success' ? 'var(--success)' : type === 'warning' ? 'var(--warning)' : type === 'danger' ? 'var(--danger)' : 'var(--primary)';
-    toast.style = `position: fixed; bottom: 20px; right: 20px; background: ${bgColor}; color: var(--text-main); padding: 1rem; border-radius: 0.5rem; z-index: 9999; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: opacity 0.5s; display: flex; align-items: center; gap: 0.5rem; max-width: 400px;`;
+    toast.style = `position: fixed; bottom: 20px; right: 20px; background: ${bgColor}; color: white; padding: 1rem; border-radius: 0.5rem; z-index: 9999; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: opacity 0.5s; display: flex; align-items: center; gap: 0.5rem; max-width: 400px;`;
     
     let icon = 'fa-circle-info';
     if(type === 'success') icon = 'fa-circle-check';
@@ -638,6 +940,18 @@ function showToast(message, type = 'success') {
 // ==========================================
 
 // --- Messaging ---
+function getFriendlyName(id) {
+    const map = {
+        'doctor1': 'Dr. Patel',
+        'doctor2': 'Dr. Sharma',
+        'patient1': 'Alice Smith',
+        'patient2': 'Bob Jones',
+        'patient3': 'Carol White',
+        'patient4': 'David Miller'
+    };
+    return map[id] || id;
+}
+
 async function openMessageModal(doctorName) {
     const modal = document.getElementById('messageModal');
     if (!modal) {
@@ -660,7 +974,7 @@ async function openMessageModal(doctorName) {
         `;
         document.body.appendChild(m);
     }
-    document.getElementById('msgModalTitle').innerText = `Message ${doctorName}`;
+    document.getElementById('msgModalTitle').innerText = `Message ${getFriendlyName(doctorName)}`;
     document.getElementById('msgBody').value = '';
     document.getElementById('msgSendBtn').setAttribute('data-recipient', doctorName);
     document.getElementById('messageModal').classList.add('active');
@@ -672,7 +986,7 @@ async function openMessageModal(doctorName) {
         const histDiv = document.getElementById('msgHistory');
         if (filtered.length > 0) {
             histDiv.innerHTML = '<p class="text-muted" style="font-size:0.8rem; margin-bottom:0.5rem;">Previous messages:</p>' +
-                filtered.map(m => `<div style="background:rgba(0,0,0,0.03);padding:0.5rem;border-radius:0.25rem;margin-bottom:0.5rem;font-size:0.85rem;"><strong>${m.sender}</strong>: ${m.body} <span class="text-muted" style="font-size:0.75rem;">${m.timestamp}</span></div>`).join('');
+                filtered.map(m => `<div style="background:rgba(255,255,255,0.03);padding:0.5rem;border-radius:0.25rem;margin-bottom:0.5rem;font-size:0.85rem;"><strong>${getFriendlyName(m.sender)}</strong>: ${m.body} <span class="text-muted" style="font-size:0.75rem;">${m.timestamp}</span></div>`).join('');
         } else {
             histDiv.innerHTML = '<p class="text-muted" style="font-size:0.85rem;">No previous messages.</p>';
         }
@@ -691,15 +1005,17 @@ async function sendMessage() {
         const res = await fetch(`${API_BASE}/messages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ recipient, body })
+            body: JSON.stringify({ recipient, body, sender: currentUserId })
         });
         const data = await res.json();
         if (data.success) {
-            showToast(`Message delivered to ${recipient}`, 'success');
+            showToast(`Message delivered to ${getFriendlyName(recipient)}`, 'success');
             document.getElementById('msgBody').value = '';
             // Refresh history
             openMessageModal(recipient);
             updateNotifBadge();
+            // Refresh doctor inbox if in doctor mode
+            if (currentRole === 'doctor') loadDoctorInbox();
         }
     } catch(e) {
         showToast('Failed to send – server offline', 'danger');
@@ -730,7 +1046,7 @@ async function bookConsultation(doctorName, specialty) {
         `;
         document.body.appendChild(m);
     }
-    document.getElementById('bookModalTitle').innerText = `Book ${doctorName}`;
+    document.getElementById('bookModalTitle').innerText = `Book ${getFriendlyName(doctorName)}`;
     document.getElementById('bookDateTime').value = '';
     const confirmBtn = document.getElementById('bookConfirmBtn');
     confirmBtn.onclick = async () => {
@@ -747,7 +1063,7 @@ async function bookConsultation(doctorName, specialty) {
             });
             const data = await res.json();
             if (data.success) {
-                showToast(`Consultation booked with ${doctorName} on ${formatted}`, 'success');
+                showToast(`Consultation booked with ${getFriendlyName(doctorName)} on ${formatted}`, 'success');
                 closeModal('bookModal');
                 loadConsultations();
                 updateNotifBadge();
@@ -783,7 +1099,7 @@ async function loadConsultations() {
                      <button class="btn btn-sm btn-outline" onclick="addReminder('${c.doctor_name}','${c.scheduled_at}')">Add Reminder</button>
                    </div>`;
             container.innerHTML += `
-                <div style="background:rgba(0,0,0,0.02);border:1px solid var(--border);padding:1rem;border-radius:0.5rem;margin-bottom:1rem;border-left:3px solid ${borderColor};">
+                <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);padding:1rem;border-radius:0.5rem;margin-bottom:1rem;border-left:3px solid ${borderColor};">
                     <div class="d-flex justify-between align-center mb-1">
                         <strong>${statusIcon} ${c.scheduled_at} - ${c.doctor_name}</strong>
                         ${statusLabel}
@@ -1154,7 +1470,7 @@ async function loadHealthLogs() {
         container.innerHTML = '<h4 class="text-muted" style="font-size:0.75rem;text-transform:uppercase;margin-bottom:0.5rem;">Recent Health Logs (from DB)</h4>';
         logs.slice(0, 5).forEach(l => {
             const color = l.severity === 'Critical' ? 'var(--danger)' : l.severity === 'Warning' ? 'var(--warning)' : 'var(--success)';
-            container.innerHTML += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:0.5rem;padding:0.5rem;background:rgba(0,0,0,0.02);border-radius:0.25rem;border-left:3px solid ${color};"><span>${l.event_type}</span><span class="text-muted">${l.timestamp}</span></div>`;
+            container.innerHTML += `<div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:0.5rem;padding:0.5rem;background:rgba(255,255,255,0.02);border-radius:0.25rem;border-left:3px solid ${color};"><span>${l.event_type}</span><span class="text-muted">${l.timestamp}</span></div>`;
         });
     } catch(e) { console.error(e); }
 }
@@ -1199,7 +1515,7 @@ function saveContact() {
     if (contactsList) {
         const btn = contactsList.querySelector('button');
         const newContact = document.createElement('div');
-        newContact.style = 'background:rgba(0,0,0,0.02);border:1px solid var(--border);padding:1rem;border-radius:0.5rem;margin-bottom:1rem;';
+        newContact.style = 'background:rgba(255,255,255,0.02);border:1px solid var(--border);padding:1rem;border-radius:0.5rem;margin-bottom:1rem;';
         newContact.innerHTML = `
             <h4 style="margin:0 0 0.25rem 0;">${name} (${relation})</h4>
             <p class="text-success" style="font-size:0.85rem;margin-bottom:0.5rem;"><i class="fa-solid fa-user-check"></i> Emergency Contact</p>
@@ -1285,725 +1601,73 @@ document.addEventListener('mouseup', () => {
     }
 });
 
-// ==========================================
-// FULL FUNCTIONAL HANDLERS FOR CAREGIVER VIEW
-// ==========================================
+// --- Enterprise Settings (Facilities & Org) ---
+let globalFacilities = [
+    { id: 1, name: "Apollo Care - Delhi", status: "Active", patients: 85, manager: "Priya Kumar", docs: 3, nurses: 8, alerts: 3, response: "12 mins" },
+    { id: 2, name: "Apollo Care - Mumbai", status: "Active", patients: 65, manager: "Raj Singh", docs: 2, nurses: 6, alerts: 1, response: "9 mins" },
+    { id: 3, name: "Apollo Care - Bangalore", status: "Active", patients: 30, manager: "Anita Desai", docs: 1, nurses: 4, alerts: 0, response: "8 mins" }
+];
 
-// --- Helper: Create a modal shell ---
-function createModal(id, title, bodyHtml, maxWidth = '550px') {
-    let modal = document.getElementById(id);
-    if (modal) { modal.remove(); }
-    modal = document.createElement('div');
-    modal.id = id;
-    modal.className = 'modal';
-    modal.innerHTML = `
-        <div class="modal-content" style="max-width:${maxWidth};">
-            <div class="d-flex justify-between align-center mb-2">
-                <h3>${title}</h3>
-                <button class="btn btn-outline btn-sm" onclick="closeModal('${id}')">✕</button>
-            </div>
-            <div id="${id}_body">${bodyHtml}</div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-    modal.classList.add('active');
-    return modal;
-}
-
-// --- AI Predictions: View Detailed Analysis ---
-function openAIDetailedAnalysis() {
-    createModal('aiDetailModal', '<i class="fa-solid fa-brain text-primary"></i> Fall Risk - Detailed Analysis', `
-        <div style="background:rgba(239,68,68,0.1);padding:1rem;border-radius:0.5rem;margin-bottom:1rem;border-left:4px solid var(--danger);">
-            <h4 class="text-danger" style="margin:0 0 0.5rem;">72% Fall Risk — Alice Smith</h4>
-            <p class="text-muted" style="font-size:0.85rem;margin:0;">Model: SafeGuard Neural v3.2 | Confidence: 89% | Last trained: 6h ago</p>
-        </div>
-        <h4 style="margin:0 0 0.5rem;font-size:0.9rem;">Contributing Factors</h4>
-        <div style="margin-bottom:1rem;">
-            <div class="d-flex justify-between" style="font-size:0.85rem;margin-bottom:0.5rem;">
-                <span>Heart rate irregularity</span>
-                <span class="text-danger" style="font-weight:600;">35% weight</span>
-            </div>
-            <div style="height:6px;background:var(--bg);border-radius:3px;"><div style="width:35%;height:100%;background:var(--danger);border-radius:3px;"></div></div>
-        </div>
-        <div style="margin-bottom:1rem;">
-            <div class="d-flex justify-between" style="font-size:0.85rem;margin-bottom:0.5rem;">
-                <span>Physical activity down 40%</span>
-                <span class="text-warning" style="font-weight:600;">28% weight</span>
-            </div>
-            <div style="height:6px;background:var(--bg);border-radius:3px;"><div style="width:28%;height:100%;background:var(--warning);border-radius:3px;"></div></div>
-        </div>
-        <div style="margin-bottom:1rem;">
-            <div class="d-flex justify-between" style="font-size:0.85rem;margin-bottom:0.5rem;">
-                <span>New medication (Atenolol)</span>
-                <span class="text-warning" style="font-weight:600;">22% weight</span>
-            </div>
-            <div style="height:6px;background:var(--bg);border-radius:3px;"><div style="width:22%;height:100%;background:var(--warning);border-radius:3px;"></div></div>
-        </div>
-        <div style="margin-bottom:1.5rem;">
-            <div class="d-flex justify-between" style="font-size:0.85rem;margin-bottom:0.5rem;">
-                <span>Sleep disruption</span>
-                <span class="text-muted" style="font-weight:600;">15% weight</span>
-            </div>
-            <div style="height:6px;background:var(--bg);border-radius:3px;"><div style="width:15%;height:100%;background:var(--primary);border-radius:3px;"></div></div>
-        </div>
-        <h4 style="margin:0 0 0.5rem;font-size:0.9rem;">Recommended Actions</h4>
-        <ul style="list-style:none;padding:0;font-size:0.85rem;">
-            <li style="margin-bottom:0.5rem;padding:0.5rem;background:rgba(0,0,0,0.03);border-radius:0.25rem;">✅ Schedule physical therapy evaluation within 48h</li>
-            <li style="margin-bottom:0.5rem;padding:0.5rem;background:rgba(0,0,0,0.03);border-radius:0.25rem;">✅ Increase monitoring frequency to every 2 hours</li>
-            <li style="margin-bottom:0.5rem;padding:0.5rem;background:rgba(0,0,0,0.03);border-radius:0.25rem;">✅ Review Atenolol dosage with Dr. Sharma</li>
-            <li style="padding:0.5rem;background:rgba(0,0,0,0.03);border-radius:0.25rem;">✅ Install bathroom grab bars</li>
-        </ul>
-        <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:1rem;" onclick="showToast('Actions added to care plan','success');closeModal('aiDetailModal');">
-            <i class="fa-solid fa-clipboard-check"></i> Add to Care Plan
-        </button>
-    `, '600px');
-}
-
-// --- AI Predictions: Adjust Reminders ---
-function openAdjustReminders() {
-    createModal('adjustRemindersModal', '<i class="fa-solid fa-bell text-warning"></i> Adjust Medication Reminders — Bob', `
-        <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;">Bob tends to forget medications on weekends. Adjust reminder schedule below.</p>
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Morning Reminder</label>
-            <input type="time" id="remMorning" value="08:00" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-        </div>
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Evening Reminder</label>
-            <input type="time" id="remEvening" value="20:00" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-        </div>
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Extra Weekend Reminder</label>
-            <div class="d-flex gap-1 align-center" style="gap:0.5rem;">
-                <input type="checkbox" id="remWeekend" checked style="width:18px;height:18px;">
-                <span style="font-size:0.85rem;">Send additional reminder on Sat & Sun at 10:00 AM</span>
-            </div>
-        </div>
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Caregiver Escalation (if missed)</label>
-            <select style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-                <option>Call sister after 30 minutes</option>
-                <option>Send SMS to caregiver after 15 minutes</option>
-                <option>No escalation</option>
-            </select>
-        </div>
-        <button class="btn btn-success" style="width:100%;justify-content:center;" onclick="showToast('Reminder schedule updated for Bob','success');closeModal('adjustRemindersModal');">
-            <i class="fa-solid fa-floppy-disk"></i> Save Reminder Settings
-        </button>
-    `);
-}
-
-// --- AI Predictions: Alert Doctor ---
-function openAlertDoctorModal() {
-    createModal('alertDoctorModal', '<i class="fa-solid fa-user-doctor text-danger"></i> Alert Doctor — Cardiac Anomaly', `
-        <div style="background:rgba(239,68,68,0.15);padding:1rem;border-radius:0.5rem;border-left:4px solid var(--danger);margin-bottom:1rem;">
-            <h4 class="text-danger" style="margin:0 0 0.25rem;">⚠️ Cardiac Anomaly Detected</h4>
-            <p style="font-size:0.85rem;margin:0;">Carol's HR spiked to 112 bpm (normal baseline: 72 bpm)</p>
-        </div>
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Select Doctor</label>
-            <select id="alertDoctorSelect" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-                <option>Dr. Patel — General Practice</option>
-                <option>Dr. Sharma — Cardiologist</option>
-            </select>
-        </div>
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Priority Level</label>
-            <div class="d-flex" style="gap:0.5rem;">
-                <button class="chip active" onclick="this.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));this.classList.add('active');" style="background:var(--danger);color:white;border-color:var(--danger);">Urgent</button>
-                <button class="chip" onclick="this.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));this.classList.add('active');">High</button>
-                <button class="chip" onclick="this.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));this.classList.add('active');">Normal</button>
-            </div>
-        </div>
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Additional Notes</label>
-            <textarea rows="3" placeholder="Add context for the doctor..." style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;resize:vertical;"></textarea>
-        </div>
-        <button class="btn btn-danger" style="width:100%;justify-content:center;" onclick="
-            var doc = document.getElementById('alertDoctorSelect').value.split('—')[0].trim();
-            showToast('URGENT alert sent to ' + doc + '!', 'danger');
-            closeModal('alertDoctorModal');
-        ">
-            <i class="fa-solid fa-paper-plane"></i> Send Alert Now
-        </button>
-    `);
-}
-
-// --- AI Predictions: Check-in ---
-function openCheckInModal() {
-    createModal('checkInModal', '<i class="fa-solid fa-phone text-primary"></i> Request Patient Check-in', `
-        <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;">Send a check-in request to a patient. They will receive a push notification and SMS.</p>
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Select Patient</label>
-            <select id="checkInPatient" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-                <option>Diana — Sleep Pattern Anomaly</option>
-                <option>Alice Smith</option>
-                <option>Bob Jones</option>
-                <option>Carol White</option>
-            </select>
-        </div>
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Check-in Method</label>
-            <div class="d-flex" style="gap:0.5rem;">
-                <button class="chip active" onclick="this.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));this.classList.add('active');">Push + SMS</button>
-                <button class="chip" onclick="this.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));this.classList.add('active');">Push Only</button>
-                <button class="chip" onclick="this.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));this.classList.add('active');">Phone Call</button>
-            </div>
-        </div>
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Message</label>
-            <textarea rows="2" id="checkInMsg" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;resize:vertical;">Hi, just checking in! How are you feeling today?</textarea>
-        </div>
-        <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="
-            var patient = document.getElementById('checkInPatient').value.split('—')[0].trim();
-            showToast('Check-in request sent to ' + patient, 'success');
-            closeModal('checkInModal');
-        ">
-            <i class="fa-solid fa-paper-plane"></i> Send Check-in Request
-        </button>
-    `);
-}
-
-// --- AI Predictions: Refresh Models ---
-function refreshAIModels() {
-    const btn = event.target.closest('.btn');
-    const origHTML = btn.innerHTML;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Refreshing...';
-    btn.disabled = true;
-    setTimeout(() => {
-        btn.innerHTML = origHTML;
-        btn.disabled = false;
-        showToast('AI Models retrained with latest data. Next refresh in 6h.', 'success');
-    }, 1500);
-}
-
-// --- Live Location: Geofence Settings ---
-function openGeofenceSettings() {
-    createModal('geofenceModal', '<i class="fa-solid fa-map-location-dot text-primary"></i> Geofence Settings', `
-        <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;">Configure safe zones. Alerts trigger when a patient exits a geofence.</p>
-        <h4 style="font-size:0.9rem;margin-bottom:0.5rem;">Active Geofences</h4>
-        <div id="geofenceList">
-            <div style="background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:0.75rem;border-left:3px solid var(--success);">
-                <div class="d-flex justify-between align-center">
-                    <div>
-                        <strong>🏠 Home</strong>
-                        <p class="text-muted" style="font-size:0.8rem;margin:0.25rem 0 0;">Radius: 200m | 123 Elm Street, Springfield</p>
-                    </div>
-                    <span class="text-success" style="font-size:0.8rem;">Active</span>
-                </div>
-            </div>
-            <div style="background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:0.75rem;border-left:3px solid var(--primary);">
-                <div class="d-flex justify-between align-center">
-                    <div>
-                        <strong>💊 Apollo Pharmacy</strong>
-                        <p class="text-muted" style="font-size:0.8rem;margin:0.25rem 0 0;">Radius: 100m | MG Road, Springfield</p>
-                    </div>
-                    <span class="text-primary" style="font-size:0.8rem;">Active</span>
-                </div>
-            </div>
-            <div style="background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:1rem;border-left:3px solid var(--warning);">
-                <div class="d-flex justify-between align-center">
-                    <div>
-                        <strong>🏥 City Hospital</strong>
-                        <p class="text-muted" style="font-size:0.8rem;margin:0.25rem 0 0;">Radius: 500m | Hospital Road</p>
-                    </div>
-                    <span class="text-warning" style="font-size:0.8rem;">Monitoring</span>
-                </div>
-            </div>
-        </div>
-        <h4 style="font-size:0.9rem;margin-bottom:0.5rem;">Add New Geofence</h4>
-        <div style="display:grid;gap:0.75rem;margin-bottom:1rem;">
-            <input type="text" id="geoName" placeholder="Zone Name (e.g. Park)" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-            <input type="text" id="geoAddress" placeholder="Address / Coordinates" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-            <div class="d-flex" style="gap:0.75rem;">
-                <div style="flex:1;">
-                    <label class="text-muted" style="font-size:0.8rem;">Radius (meters)</label>
-                    <input type="number" id="geoRadius" value="200" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-                </div>
-                <div style="flex:1;">
-                    <label class="text-muted" style="font-size:0.8rem;">Alert Type</label>
-                    <select style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-                        <option>Exit Alert</option>
-                        <option>Entry Alert</option>
-                        <option>Both</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-        <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="
-            var name = document.getElementById('geoName').value.trim();
-            if (!name) { showToast('Enter a zone name','warning'); return; }
-            var addr = document.getElementById('geoAddress').value.trim() || 'Custom location';
-            var radius = document.getElementById('geoRadius').value || '200';
-            var listEl = document.getElementById('geofenceList');
-            var newZone = document.createElement('div');
-            newZone.style = 'background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:0.75rem;border-left:3px solid var(--success);';
-            newZone.innerHTML = '<div class=\\'d-flex justify-between align-center\\'><div><strong>📍 '+name+'</strong><p class=\\'text-muted\\' style=\\'font-size:0.8rem;margin:0.25rem 0 0;\\'>Radius: '+radius+'m | '+addr+'</p></div><span class=\\'text-success\\' style=\\'font-size:0.8rem;\\'>Active</span></div>';
-            listEl.appendChild(newZone);
-            document.getElementById('geoName').value='';
-            document.getElementById('geoAddress').value='';
-            showToast('Geofence \\'' + name + '\\' created successfully','success');
-        ">
-            <i class="fa-solid fa-plus"></i> Add Geofence
-        </button>
-    `, '600px');
-}
-
-// --- Facilities: Add Facility ---
-function openAddFacility() {
-    createModal('addFacilityModal', '<i class="fa-solid fa-building-user text-primary"></i> Add New Facility', `
-        <div style="display:grid;gap:0.75rem;margin-bottom:1rem;">
-            <input type="text" id="facName" placeholder="Facility Name" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-            <input type="text" id="facCity" placeholder="City" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-            <input type="text" id="facManager" placeholder="Manager Name" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-            <div class="d-flex" style="gap:0.75rem;">
-                <input type="number" id="facStaff" placeholder="Staff Count" style="flex:1;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-                <input type="number" id="facCapacity" placeholder="Patient Capacity" style="flex:1;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-            </div>
-        </div>
-        <button class="btn btn-success" style="width:100%;justify-content:center;" onclick="
-            var name = document.getElementById('facName').value.trim();
-            var city = document.getElementById('facCity').value.trim();
-            if(!name||!city){showToast('Name and city required','warning');return;}
-            var grid = document.querySelector('#facilities .grid-3');
-            if(grid){
-                var card = document.createElement('div');
-                card.className='card';
-                card.style='border-top:4px solid var(--success);';
-                card.innerHTML='<h3 class=\\'mb-1\\'>'+name+' - '+city+'</h3><p class=\\'text-success\\' style=\\'font-size:0.85rem;margin-bottom:0.5rem;\\'><i class=\\'fa-solid fa-circle-check\\'></i> Active (0 elderly)</p><p class=\\'text-muted\\' style=\\'font-size:0.85rem;margin-bottom:1rem;\\'>Manager: '+(document.getElementById('facManager').value||'TBD')+'</p><button class=\\'btn btn-sm btn-outline w-100\\' style=\\'width:100%;justify-content:center;\\' onclick=\\'openManageFacility(this.parentElement.querySelector(\"h3\").innerText)\\'>Manage Facility</button>';
-                grid.appendChild(card);
-            }
-            showToast('Facility \\'' + name + '\\' added successfully','success');
-            closeModal('addFacilityModal');
-        ">
-            <i class="fa-solid fa-plus"></i> Create Facility
-        </button>
-    `);
-}
-
-// --- Facilities: Manage Facility ---
-function openManageFacility(facilityTitle) {
-    var facName = facilityTitle || 'Facility';
-    createModal('manageFacModal', '<i class="fa-solid fa-gear text-primary"></i> Manage: ' + facName, `
-        <div class="d-flex" style="gap:0.5rem;margin-bottom:1rem;">
-            <button class="chip active" onclick="this.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));this.classList.add('active');">Overview</button>
-            <button class="chip" onclick="this.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));this.classList.add('active');">Staff</button>
-            <button class="chip" onclick="this.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));this.classList.add('active');">Patients</button>
-            <button class="chip" onclick="this.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));this.classList.add('active');">Reports</button>
-        </div>
-        <div style="background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:1rem;">
-            <div class="d-flex justify-between" style="margin-bottom:0.5rem;"><span class="text-muted">Occupancy</span><span>72%</span></div>
-            <div style="height:6px;background:var(--bg);border-radius:3px;margin-bottom:1rem;"><div style="width:72%;height:100%;background:var(--success);border-radius:3px;"></div></div>
-            <div class="d-flex justify-between" style="margin-bottom:0.5rem;"><span class="text-muted">Avg Response Time</span><span>12 mins</span></div>
-            <div class="d-flex justify-between" style="margin-bottom:0.5rem;"><span class="text-muted">Active Staff Today</span><span>8 / 15</span></div>
-            <div class="d-flex justify-between"><span class="text-muted">Pending Alerts</span><span class="text-danger">3</span></div>
-        </div>
-        <div class="d-flex" style="gap:0.5rem;">
-            <button class="btn btn-outline" style="flex:1;justify-content:center;" onclick="showToast('Generating report for '+${JSON.stringify(facName)},'success');">
-                <i class="fa-solid fa-download"></i> Export Report
-            </button>
-            <button class="btn btn-primary" style="flex:1;justify-content:center;" onclick="showToast('Staff roster opened','success');">
-                <i class="fa-solid fa-user-plus"></i> Add Staff
-            </button>
-        </div>
-    `, '600px');
-}
-
-// --- Org Settings: Save Brand ---
-function saveBrandSettings() {
-    var orgName = document.querySelector('#admin input[type="text"]');
-    var primaryColor = document.querySelectorAll('#admin input[type="color"]')[0];
-    var secondaryColor = document.querySelectorAll('#admin input[type="color"]')[1];
-    var portalUrl = document.querySelectorAll('#admin input[type="text"]')[1];
-
-    var btn = event.target.closest('.btn');
-    var origHTML = btn.innerHTML;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
-    btn.disabled = true;
+function loadFacilities() {
+    const container = document.getElementById('facilitiesContainer');
+    if (!container) return;
     
-    setTimeout(function() {
-        btn.innerHTML = '<i class="fa-solid fa-check"></i> Saved!';
-        btn.classList.remove('btn-primary');
-        btn.classList.add('btn-success');
-        showToast('Brand settings saved! Org: ' + (orgName ? orgName.value : 'N/A'), 'success');
-        setTimeout(function() {
-            btn.innerHTML = origHTML;
-            btn.disabled = false;
-            btn.classList.remove('btn-success');
-            btn.classList.add('btn-primary');
-        }, 2000);
-    }, 1000);
+    container.innerHTML = '';
+    globalFacilities.forEach(f => {
+        const alertClass = f.alerts > 0 ? (f.alerts > 2 ? 'text-danger' : 'text-warning') : 'text-success';
+        
+        container.innerHTML += `
+            <div class="card" style="border-top: 4px solid var(--primary);">
+                <h3 class="mb-1">${f.name}</h3>
+                <p class="text-success" style="font-size: 0.85rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-circle-check"></i> ${f.status} (${f.patients} elderly)</p>
+                <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">Manager: ${f.manager}</p>
+                <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Staff:</span> <span>${f.docs + f.nurses} (${f.docs} Docs, ${f.nurses} Nurses)</span></div>
+                <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 0.25rem;"><span>Alerts Today:</span> <span class="${alertClass}">${f.alerts} pending</span></div>
+                <div class="d-flex justify-between text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;"><span>Avg Response:</span> <span>${f.response}</span></div>
+                <button class="btn btn-sm btn-outline w-100" style="width: 100%; justify-content: center;" onclick="showToast('Loading dashboard for ${f.name}...', 'success')">Manage Facility</button>
+            </div>
+        `;
+    });
 }
 
-// --- Org Settings: Upgrade Plan ---
-function openUpgradePlan() {
-    createModal('upgradePlanModal', '<i class="fa-solid fa-rocket text-primary"></i> Upgrade Your Plan', `
-        <div class="d-flex" style="gap:1rem;margin-bottom:1rem;">
-            <div style="flex:1;background:rgba(0,0,0,0.03);padding:1.25rem;border-radius:0.5rem;border:1px solid var(--border);">
-                <h4 style="margin:0 0 0.25rem;color:var(--primary);">Premium</h4>
-                <p style="font-size:0.75rem;color:var(--text-muted);margin:0 0 0.5rem;">Current Plan</p>
-                <p style="font-size:1.5rem;font-weight:bold;margin:0;">₹9,999<span class="text-muted" style="font-size:0.8rem;font-weight:400;">/mo</span></p>
-                <ul style="list-style:none;padding:0;margin:0.75rem 0 0;font-size:0.8rem;">
-                    <li class="text-success" style="margin-bottom:0.25rem;">✓ 100 patients</li>
-                    <li class="text-success" style="margin-bottom:0.25rem;">✓ Telehealth</li>
-                    <li class="text-success" style="margin-bottom:0.25rem;">✓ Wearables</li>
-                    <li class="text-danger">✗ API Access</li>
-                </ul>
-            </div>
-            <div style="flex:1;background:rgba(79,70,229,0.1);padding:1.25rem;border-radius:0.5rem;border:2px solid var(--primary);">
-                <h4 style="margin:0 0 0.25rem;color:var(--primary);">Enterprise</h4>
-                <p style="font-size:0.75rem;color:var(--text-muted);margin:0 0 0.5rem;">Recommended</p>
-                <p style="font-size:1.5rem;font-weight:bold;margin:0;">₹24,999<span class="text-muted" style="font-size:0.8rem;font-weight:400;">/mo</span></p>
-                <ul style="list-style:none;padding:0;margin:0.75rem 0 0;font-size:0.8rem;">
-                    <li class="text-success" style="margin-bottom:0.25rem;">✓ Unlimited patients</li>
-                    <li class="text-success" style="margin-bottom:0.25rem;">✓ Multi-facility</li>
-                    <li class="text-success" style="margin-bottom:0.25rem;">✓ API Access</li>
-                    <li class="text-success">✓ Priority Support</li>
-                </ul>
-            </div>
-        </div>
-        <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="showToast('Upgrade request submitted. Our team will contact you within 24h.','success');closeModal('upgradePlanModal');">
-            <i class="fa-solid fa-arrow-up"></i> Upgrade to Enterprise
-        </button>
-    `, '550px');
+function addFacility() {
+    const name = prompt("Enter Facility Name:");
+    if (!name) return;
+    const manager = prompt("Enter Manager Name:");
+    if (!manager) return;
+    
+    globalFacilities.push({
+        id: globalFacilities.length + 1,
+        name: name,
+        status: "Active",
+        patients: 0,
+        manager: manager,
+        docs: 0,
+        nurses: 0,
+        alerts: 0,
+        response: "-"
+    });
+    
+    showToast('New facility added successfully.', 'success');
+    loadFacilities();
 }
 
-// --- Community: Write Post ---
-function openWritePost() {
-    createModal('writePostModal', '<i class="fa-solid fa-pen-to-square text-primary"></i> Write a Post', `
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Post to Group</label>
-            <select style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-                <option>Daughters Caring for Elderly Parents</option>
-                <option>Fall Prevention Support</option>
-                <option>General Discussion</option>
-            </select>
-        </div>
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Your Post</label>
-            <textarea id="postContent" rows="4" placeholder="Share your experience, ask a question, or offer advice..." style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;resize:vertical;"></textarea>
-        </div>
-        <div class="d-flex" style="gap:0.5rem;margin-bottom:1rem;">
-            <button class="btn btn-sm btn-outline"><i class="fa-solid fa-image"></i> Photo</button>
-            <button class="btn btn-sm btn-outline"><i class="fa-solid fa-link"></i> Link</button>
-            <button class="btn btn-sm btn-outline"><i class="fa-solid fa-face-smile"></i> Emoji</button>
-        </div>
-        <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="
-            var content = document.getElementById('postContent').value.trim();
-            if(!content){showToast('Write something first','warning');return;}
-            var postsArea = document.querySelector('#community .card .d-flex.gap-1.align-center.mb-1')?.closest('.card');
-            if(postsArea){
-                var newPost = document.createElement('div');
-                newPost.style='background:var(--bg);padding:1rem;border-radius:0.5rem;margin-bottom:1rem;border:1px solid var(--border);';
-                newPost.innerHTML='<div class=\\'d-flex gap-1 align-center mb-1\\'><img src=\\'https://ui-avatars.com/api/?name=You&background=6366f1&color=fff&rounded=true\\' width=\\'30\\' height=\\'30\\'><div><strong style=\\'font-size:0.9rem;\\'>You</strong> <span class=\\'text-muted\\' style=\\'font-size:0.75rem;\\'>• Just now</span></div></div><p style=\\'font-size:0.9rem;margin-bottom:0.5rem;\\'>'+content+'</p><div class=\\'d-flex gap-1 text-muted\\' style=\\'font-size:0.8rem;\\'><span><i class=\\'fa-regular fa-heart\\'></i> 0</span> <span><i class=\\'fa-regular fa-comment\\'></i> 0 replies</span></div>';
-                var writeBtn = postsArea.querySelector('.btn-outline.w-100');
-                if(writeBtn) postsArea.insertBefore(newPost, writeBtn);
-            }
-            showToast('Post published successfully!','success');
-            closeModal('writePostModal');
-        ">
-            <i class="fa-solid fa-paper-plane"></i> Publish Post
-        </button>
-    `);
+function saveBrandSettings(btn) {
+    const orgName = document.getElementById('orgNameInput').value;
+    const pColor = document.getElementById('primaryColorInput').value;
+    const sColor = document.getElementById('secondaryColorInput').value;
+    const orgUrl = document.getElementById('orgUrlInput').value;
+    
+    // Update CSS variables globally
+    document.documentElement.style.setProperty('--primary', pColor);
+    document.documentElement.style.setProperty('--primary-hover', pColor);
+    document.documentElement.style.setProperty('--success', sColor);
+    
+    // Update Branding in DOM
+    const brandLabel = document.querySelector('.nav-brand');
+    if (brandLabel) {
+        brandLabel.innerHTML = `<i class="fa-solid fa-shield-heart"></i> ${orgName}`;
+    }
+    
+    handleAction(btn, 'Save Brand Settings', 'Organization settings updated. Colors applied!', 'success');
 }
-
-// --- Community: RSVP ---
-function openRSVP() {
-    createModal('rsvpModal', '<i class="fa-solid fa-calendar-check text-success"></i> RSVP — Live Q&A: Fall Prevention', `
-        <div style="background:rgba(16,185,129,0.1);padding:1rem;border-radius:0.5rem;border-left:4px solid var(--success);margin-bottom:1rem;">
-            <h4 style="margin:0 0 0.25rem;">Oct 15, 7:00 PM — Live Q&A: Fall Prevention</h4>
-            <p class="text-muted" style="font-size:0.85rem;margin:0;">Hosted by Dr. Sharma (Geriatric Specialist) | 45 mins</p>
-        </div>
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Your Name</label>
-            <input type="text" id="rsvpName" placeholder="Enter your name" value="Caregiver" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-        </div>
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Pre-submit a question (optional)</label>
-            <textarea rows="2" placeholder="Type a question for the speaker..." style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;resize:vertical;"></textarea>
-        </div>
-        <div style="margin-bottom:1rem;">
-            <div class="d-flex gap-1 align-center" style="gap:0.5rem;">
-                <input type="checkbox" checked style="width:18px;height:18px;">
-                <span style="font-size:0.85rem;">Send me a reminder 30 minutes before</span>
-            </div>
-        </div>
-        <button class="btn btn-success" style="width:100%;justify-content:center;" onclick="
-            var name = document.getElementById('rsvpName').value.trim()||'User';
-            var rsvpBtn = document.querySelector('#community .btn-success');
-            if(rsvpBtn){
-                rsvpBtn.innerHTML='<i class=\\'fa-solid fa-check\\'></i> RSVP Confirmed';
-                rsvpBtn.disabled=true;
-                rsvpBtn.style.opacity='0.7';
-            }
-            showToast(name + ', you\\'re confirmed for the Fall Prevention Q&A on Oct 15!','success');
-            closeModal('rsvpModal');
-        ">
-            <i class="fa-solid fa-check"></i> Confirm RSVP
-        </button>
-    `);
-}
-
-// --- Community: Discover & Expert Q&A filter tabs ---
-function openCommunityDiscover() {
-    createModal('discoverModal', '<i class="fa-solid fa-compass text-primary"></i> Discover Groups', `
-        <div class="d-flex" style="gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap;">
-            <span class="chip active">All</span>
-            <span class="chip">Caregiving</span>
-            <span class="chip">Health</span>
-            <span class="chip">Mental Health</span>
-        </div>
-        <div style="margin-bottom:0.75rem;background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);">
-            <div class="d-flex justify-between align-center">
-                <div>
-                    <strong>Fall Prevention Support</strong>
-                    <p class="text-muted" style="font-size:0.8rem;margin:0.25rem 0 0;">1,840 members • Active daily</p>
-                </div>
-                <button class="btn btn-sm btn-primary" onclick="showToast('Joined Fall Prevention Support!','success');">Join</button>
-            </div>
-        </div>
-        <div style="margin-bottom:0.75rem;background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);">
-            <div class="d-flex justify-between align-center">
-                <div>
-                    <strong>Dementia Caregivers Network</strong>
-                    <p class="text-muted" style="font-size:0.8rem;margin:0.25rem 0 0;">3,200 members • Active daily</p>
-                </div>
-                <button class="btn btn-sm btn-primary" onclick="showToast('Joined Dementia Caregivers Network!','success');">Join</button>
-            </div>
-        </div>
-        <div style="background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);">
-            <div class="d-flex justify-between align-center">
-                <div>
-                    <strong>Caregiver Self-Care</strong>
-                    <p class="text-muted" style="font-size:0.8rem;margin:0.25rem 0 0;">980 members • Active weekly</p>
-                </div>
-                <button class="btn btn-sm btn-primary" onclick="showToast('Joined Caregiver Self-Care!','success');">Join</button>
-            </div>
-        </div>
-    `);
-}
-
-function openExpertQA() {
-    createModal('expertQAModal', '<i class="fa-solid fa-graduation-cap text-primary"></i> Expert Q&A', `
-        <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;">Ask verified medical professionals. Responses within 24h.</p>
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Category</label>
-            <select style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-                <option>Fall Prevention</option>
-                <option>Medication Management</option>
-                <option>Nutrition</option>
-                <option>Mental Health</option>
-                <option>General</option>
-            </select>
-        </div>
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Your Question</label>
-            <textarea id="expertQuestion" rows="3" placeholder="Type your question here..." style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;resize:vertical;"></textarea>
-        </div>
-        <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="
-            var q = document.getElementById('expertQuestion').value.trim();
-            if(!q){showToast('Please type a question','warning');return;}
-            showToast('Question submitted! An expert will respond within 24h.','success');
-            closeModal('expertQAModal');
-        ">
-            <i class="fa-solid fa-paper-plane"></i> Submit Question
-        </button>
-        <h4 style="margin:1.5rem 0 0.5rem;font-size:0.9rem;">Recent Answers</h4>
-        <div style="background:rgba(0,0,0,0.03);padding:1rem;border-radius:0.5rem;border:1px solid var(--border);margin-bottom:0.75rem;">
-            <p style="font-size:0.85rem;margin:0 0 0.5rem;"><strong>Q:</strong> What are the best fall-proof shoes?</p>
-            <p style="font-size:0.85rem;margin:0;color:var(--success);"><strong>Dr. Sharma:</strong> Look for non-slip soles, ankle support. Brands: New Balance 928v3, Skechers GoWalk.</p>
-        </div>
-    `, '600px');
-}
-
-// --- Dashboard Sidebar: Send Message ---
-function openSidebarMessage(patientName) {
-    createModal('sidebarMsgModal', '<i class="fa-solid fa-message text-primary"></i> Send Message to ' + patientName, `
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Message Type</label>
-            <div class="d-flex" style="gap:0.5rem;">
-                <button class="chip active" onclick="this.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));this.classList.add('active');">Text</button>
-                <button class="chip" onclick="this.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));this.classList.add('active');">Voice Note</button>
-                <button class="chip" onclick="this.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));this.classList.add('active');">Care Instruction</button>
-            </div>
-        </div>
-        <div style="margin-bottom:1rem;">
-            <textarea id="sidebarMsgBody" rows="3" placeholder="Type your message to ${patientName}..." style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;resize:vertical;"></textarea>
-        </div>
-        <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="
-            var body = document.getElementById('sidebarMsgBody').value.trim();
-            if(!body){showToast('Type a message','warning');return;}
-            fetch(API_BASE+'/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipient:'${patientName}',body:body,sender:'Caregiver'})})
-            .then(r=>r.json()).then(d=>{
-                if(d.success) showToast('Message delivered to ${patientName}','success');
-            }).catch(()=>showToast('Failed to send','danger'));
-            closeModal('sidebarMsgModal');
-        ">
-            <i class="fa-solid fa-paper-plane"></i> Send Message
-        </button>
-    `);
-}
-
-// --- Dashboard Sidebar: Trigger Emergency ---
-function triggerEmergencyResponse(patientName) {
-    createModal('emergencyModal', '<span class="text-danger"><i class="fa-solid fa-exclamation-triangle"></i> Emergency Response — ' + patientName + '</span>', `
-        <div style="background:rgba(239,68,68,0.15);padding:1rem;border-radius:0.5rem;border:2px solid var(--danger);margin-bottom:1rem;text-align:center;">
-            <div style="font-size:3rem;margin-bottom:0.5rem;">🚨</div>
-            <h3 class="text-danger" style="margin:0 0 0.25rem;">Confirm Emergency Alert</h3>
-            <p class="text-muted" style="font-size:0.85rem;margin:0;">This will immediately notify all assigned caregivers, emergency contacts, and nearby facilities.</p>
-        </div>
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.25rem;">Emergency Type</label>
-            <select id="emergencyType" style="width:100%;background:var(--bg);color:var(--text-main);border:1px solid var(--border);border-radius:0.5rem;padding:0.75rem;font-family:'Outfit',sans-serif;">
-                <option>Fall Detected</option>
-                <option>Medical Emergency</option>
-                <option>Wandering / Missing</option>
-                <option>Unresponsive</option>
-                <option>Other</option>
-            </select>
-        </div>
-        <div style="margin-bottom:1rem;">
-            <label class="text-muted" style="font-size:0.85rem;display:block;margin-bottom:0.5rem;">Actions that will be triggered:</label>
-            <div style="font-size:0.85rem;">
-                <p style="margin:0 0 0.5rem;"><i class="fa-solid fa-phone text-success"></i> Call primary caregiver (Mom)</p>
-                <p style="margin:0 0 0.5rem;"><i class="fa-solid fa-location-dot text-primary"></i> Share live GPS location</p>
-                <p style="margin:0 0 0.5rem;"><i class="fa-solid fa-bell text-warning"></i> Alert all assigned staff</p>
-                <p style="margin:0;"><i class="fa-solid fa-hospital text-danger"></i> Notify nearest facility</p>
-            </div>
-        </div>
-        <div class="d-flex" style="gap:0.5rem;">
-            <button class="btn btn-outline" style="flex:1;justify-content:center;" onclick="closeModal('emergencyModal');">Cancel</button>
-            <button class="btn btn-danger" style="flex:1;justify-content:center;" onclick="
-                var type = document.getElementById('emergencyType').value;
-                fetch(API_BASE+'/health-logs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_type:'Emergency: '+type,severity:'Critical',notes:'Emergency triggered for ${patientName}'})})
-                .then(r=>r.json()).then(()=>{}).catch(()=>{});
-                showToast('🚨 EMERGENCY ALERT triggered for ${patientName}! All contacts notified.','danger');
-                closeModal('emergencyModal');
-            ">
-                <i class="fa-solid fa-exclamation-triangle"></i> CONFIRM EMERGENCY
-            </button>
-        </div>
-    `);
-}
-
-
-// ==========================================
-// WIRE UP ALL BUTTONS ON DOM READY
-// ==========================================
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-        // 1. Dashboard Filters
-        const dashChips = document.querySelectorAll('#dashboard .filter-bar .chip');
-        dashChips.forEach(chip => {
-            chip.addEventListener('click', (e) => {
-                dashChips.forEach(c => c.classList.remove('active'));
-                e.target.classList.add('active');
-                window.dashFilter = e.target.innerText;
-                renderElderlyCards();
-            });
-        });
-        const dashSearch = document.querySelector('#dashboard .filter-bar input.search-bar');
-        if(dashSearch) {
-            dashSearch.addEventListener('input', (e) => {
-                window.dashSearch = e.target.value.toLowerCase();
-                renderElderlyCards();
-            });
-        }
-
-        // 2. Alert Centre Filters
-        const alertChips = document.querySelectorAll('#alerts .filter-bar .chip');
-        alertChips.forEach(chip => {
-            chip.addEventListener('click', (e) => {
-                alertChips.forEach(c => c.classList.remove('active'));
-                e.target.classList.add('active');
-                window.alertFilter = e.target.innerText;
-                renderAlerts();
-            });
-        });
-        const ackAllBtn = document.querySelector('#alerts .btn-outline');
-        if (ackAllBtn && ackAllBtn.innerText.includes('Acknowledge All')) {
-            ackAllBtn.setAttribute('onclick', 'ackAllAlerts()');
-        }
-
-        // 3. Analytics Export CSV
-        const exportBtn = document.querySelector('#analytics .btn-outline');
-        if (exportBtn && exportBtn.innerText.includes('Export CSV')) {
-            exportBtn.addEventListener('click', () => {
-                const csvContent = "data:text/csv;charset=utf-8,Date,Compliance,Risk\nMon,95,12\nTue,92,14\nWed,88,18\nThu,90,15\nFri,85,22\nSat,96,19\nSun,91,13";
-                const encodedUri = encodeURI(csvContent);
-                const link = document.createElement("a");
-                link.setAttribute("href", encodedUri);
-                link.setAttribute("download", "analytics_export.csv");
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                showToast('Analytics exported to CSV', 'success');
-            });
-        }
-
-        // 4. AI Prediction buttons
-        const aiRefresh = document.querySelector('#ai-insights .btn-outline');
-        if (aiRefresh && aiRefresh.innerText.includes('Refresh Models')) {
-            aiRefresh.addEventListener('click', refreshAIModels);
-        }
-        document.querySelectorAll('#ai-insights .btn-outline.w-100').forEach(btn => {
-            if (btn.innerText.includes('Detailed Analysis')) btn.addEventListener('click', openAIDetailedAnalysis);
-            if (btn.innerText.includes('Adjust Reminders')) btn.addEventListener('click', openAdjustReminders);
-        });
-        const aiAlertDoctor = document.querySelector('#ai-insights .btn-danger');
-        if (aiAlertDoctor) aiAlertDoctor.addEventListener('click', openAlertDoctorModal);
-        document.querySelectorAll('#ai-insights .btn-outline').forEach(btn => {
-            if (btn.innerText.trim() === 'Check-in') btn.addEventListener('click', openCheckInModal);
-        });
-
-        // 5. Live Location - Geofence Settings
-        const geoBtn = document.querySelector('#live-location .btn-outline');
-        if (geoBtn && geoBtn.innerText.includes('Geofence')) {
-            geoBtn.addEventListener('click', openGeofenceSettings);
-        }
-
-        // 6. Facilities
-        const addFacBtn = document.querySelector('#facilities .btn-primary');
-        if (addFacBtn && addFacBtn.innerText.includes('Add Facility')) {
-            addFacBtn.addEventListener('click', openAddFacility);
-        }
-        document.querySelectorAll('#facilities .btn-outline.w-100').forEach(btn => {
-            if (btn.innerText.includes('Manage Facility')) {
-                btn.addEventListener('click', function() {
-                    var title = this.closest('.card').querySelector('h3').innerText;
-                    openManageFacility(title);
-                });
-            }
-        });
-
-        // 7. Admin / Org Settings
-        const saveBrandBtn = document.querySelector('#admin .btn-primary.w-100');
-        if (saveBrandBtn && saveBrandBtn.innerText.includes('Save Brand')) {
-            saveBrandBtn.addEventListener('click', saveBrandSettings);
-        }
-        const upgradeBtn = document.querySelector('#admin .btn-outline.w-100');
-        if (upgradeBtn && upgradeBtn.innerText.includes('Upgrade Plan')) {
-            upgradeBtn.addEventListener('click', openUpgradePlan);
-        }
-
-        // 8. Community
-        const writePostBtn = document.querySelector('#community .btn-outline.w-100');
-        if (writePostBtn && writePostBtn.innerText.includes('Write Post')) {
-            writePostBtn.addEventListener('click', openWritePost);
-        }
-        const rsvpBtn = document.querySelector('#community .btn-success');
-        if (rsvpBtn && rsvpBtn.innerText.includes('RSVP')) {
-            rsvpBtn.addEventListener('click', openRSVP);
-        }
-        // Community filter chips
-        const communityChips = document.querySelectorAll('#community .filter-bar .chip');
-        communityChips.forEach(chip => {
-            chip.addEventListener('click', (e) => {
-                communityChips.forEach(c => c.classList.remove('active'));
-                e.target.classList.add('active');
-                var text = e.target.innerText;
-                if (text === 'Discover') openCommunityDiscover();
-                if (text === 'Expert Q&A') openExpertQA();
-            });
-        });
-    }, 1000);
-});
