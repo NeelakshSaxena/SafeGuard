@@ -514,6 +514,9 @@ function startSOS() {
             sosModal.className = 'modal';
             sosModal.innerHTML = `
                 <div class="modal-content" style="max-width:450px;border:2px solid var(--danger);text-align:center;">
+                    <div class="d-flex justify-end mb-1">
+                        <button class="btn btn-outline btn-sm" onclick="closeModal('sosModal')">✕</button>
+                    </div>
                     <div style="font-size:4rem;margin-bottom:1rem;">🆘</div>
                     <h2 class="text-danger" style="margin-bottom:1rem;">EMERGENCY SOS TRIGGERED</h2>
                     <div style="text-align:left;background:rgba(239,68,68,0.1);padding:1rem;border-radius:0.5rem;margin-bottom:1rem;">
@@ -1177,3 +1180,59 @@ function handleAction(btn, newText, toastMessage, toastType = 'success') {
     }, 800);
 }
 
+
+// --- Modal Dragging Logic ---
+let isDraggingModal = false;
+let currentModalContent = null;
+let dragStartX = 0;
+let dragStartY = 0;
+let initialTranslateX = 0;
+let initialTranslateY = 0;
+
+document.addEventListener('mousedown', (e) => {
+    const modalContent = e.target.closest('.modal-content');
+    if (!modalContent) return;
+    
+    // Prevent dragging if clicking on interactive elements
+    const tag = e.target.tagName.toLowerCase();
+    if (['input', 'button', 'textarea', 'select'].includes(tag) || e.target.closest('.btn') || e.target.closest('a')) return;
+
+    isDraggingModal = true;
+    currentModalContent = modalContent;
+    
+    // Get current transform
+    const style = window.getComputedStyle(modalContent);
+    const transform = style.transform;
+    if (transform !== 'none') {
+        const matrix = new DOMMatrixReadOnly(transform);
+        initialTranslateX = matrix.m41;
+        initialTranslateY = matrix.m42;
+    } else {
+        initialTranslateX = 0;
+        initialTranslateY = 0;
+    }
+    
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    
+    modalContent.style.cursor = 'grabbing';
+    modalContent.style.userSelect = 'none';
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (!isDraggingModal || !currentModalContent) return;
+    
+    const dx = e.clientX - dragStartX;
+    const dy = e.clientY - dragStartY;
+    
+    currentModalContent.style.transform = `translate(${initialTranslateX + dx}px, ${initialTranslateY + dy}px)`;
+});
+
+document.addEventListener('mouseup', () => {
+    if (isDraggingModal && currentModalContent) {
+        currentModalContent.style.cursor = 'auto';
+        currentModalContent.style.userSelect = 'auto';
+        isDraggingModal = false;
+        currentModalContent = null;
+    }
+});
